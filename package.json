@@ -1,0 +1,28 @@
+{
+  "name": "manufacturing-erp-2",
+  "version": "2.0.0",
+  "private": true,
+  "description": "Manufacturing ERP 2.0 - Complete Enterprise System with Barcode Subsystem",
+  "workspaces": [
+    "backend",
+    "frontend"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace=backend & npm run dev --workspace=frontend",
+    "build": "npm run build --workspace=backend && npm run build --workspace=frontend",
+    "test": "npm run test --workspace=backend",
+    "seed": "npm run seed --workspace=backend"
+  },
+  "keywords": [
+    "erp",
+    "manufacturing",
+    "barcode",
+    "inventory",
+    "production",
+    "grn",
+    "invoices",
+    "dispatch"
+  ],
+  "author": "Antigravity Engineering",
+  "license": "UNLICENSED"
+}

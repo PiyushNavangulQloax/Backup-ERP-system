@@ -1,0 +1,592 @@
+// Manufacturing ERP 2.0 - Prisma Database Schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// -----------------------------------------------------------------------------
+// Authentication & RBAC
+// -----------------------------------------------------------------------------
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String
+  firstName    String
+  lastName     String
+  phone        String?
+  roleId       String
+  role         Role     @relation(fields: [roleId], references: [id])
+  isActive     Boolean  @default(true)
+  refreshToken String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  createdPOs        PurchaseOrder[]     @relation("POCreatedBy")
+  approvedPOs       PurchaseOrder[]     @relation("POApprovedBy")
+  receivedGRNs      GRN[]               @relation("GRNReceivedBy")
+  stockMovements    StockMovement[]     @relation("StockMovementUser")
+  materialIssues    MaterialIssue[]     @relation("MaterialIssueUser")
+  materialReturns   MaterialReturn[]    @relation("MaterialReturnUser")
+  sealedBoxes       Box[]               @relation("BoxSealedBy")
+  createdInvoices   Invoice[]           @relation("InvoiceCreatedBy")
+  dispatches        Dispatch[]          @relation("DispatchCreatedBy")
+  scanHistories     BarcodeScanHistory[]
+  auditLogs         AuditLog[]
+  notifications     Notification[]
+}
+
+model Role {
+  id          String           @id @default(uuid())
+  name        String           @unique
+  description String?
+  isSystem    Boolean          @default(false)
+  createdAt   DateTime         @default(now())
+  users       User[]
+  permissions RolePermission[]
+}
+
+model Permission {
+  id          String           @id @default(uuid())
+  code        String           @unique
+  module      String
+  description String?
+  roles       RolePermission[]
+}
+
+model RolePermission {
+  id           String     @id @default(uuid())
+  roleId       String
+  permissionId String
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([roleId, permissionId])
+}
+
+// -----------------------------------------------------------------------------
+// Master Data
+// -----------------------------------------------------------------------------
+
+model Customer {
+  id             String     @id @default(uuid())
+  code           String     @unique
+  name           String
+  email          String?
+  phone          String?
+  gstin          String?
+  billingAddress String?
+  shippingAddress String?
+  isActive       Boolean    @default(true)
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+  invoices       Invoice[]
+  dispatches     Dispatch[]
+}
+
+model Supplier {
+  id             String          @id @default(uuid())
+  code           String          @unique
+  name           String
+  email          String?
+  phone          String?
+  gstin          String?
+  address        String?
+  paymentTerms   String?
+  isActive       Boolean         @default(true)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  purchaseOrders PurchaseOrder[]
+}
+
+model Unit {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  symbol    String   @unique
+  parts     Part[]
+  createdAt DateTime @default(now())
+}
+
+model Store {
+  id             String          @id @default(uuid())
+  code           String          @unique
+  name           String
+  type           String          @default("GENERAL") // RAW_MATERIALS, FINISHED_GOODS, SCRAP, GENERAL
+  isActive       Boolean         @default(true)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  locations      Location[]
+  stocks         Stock[]
+  stockMovements StockMovement[]
+  grnItems       GRNItem[]
+  materialIssues MaterialIssue[]
+  materialReturns MaterialReturn[]
+}
+
+model Location {
+  id             String          @id @default(uuid())
+  storeId        String
+  store          Store           @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  code           String
+  name           String
+  rack           String?
+  bin            String?
+  stocks         Stock[]
+  stockMovements StockMovement[]
+  grnItems       GRNItem[]
+  createdAt      DateTime        @default(now())
+
+  @@unique([storeId, code])
+}
+
+model Part {
+  id             String          @id @default(uuid())
+  code           String          @unique
+  name           String
+  description    String?
+  partType       String          @default("RAW_MATERIAL") // RAW_MATERIAL, WORK_IN_PROGRESS, FINISHED_GOOD
+  unitId         String
+  unit           Unit            @relation(fields: [unitId], references: [id])
+  minStockLevel  Float           @default(0)
+  standardCost   Float           @default(0)
+  hsnCode        String?
+  barcodeValue   String?         @unique
+  isActive       Boolean         @default(true)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  poItems        PurchaseOrderItem[]
+  grnItems       GRNItem[]
+  stocks         Stock[]
+  stockMovements StockMovement[]
+  bom            BOM[]           @relation("BOMFinishedGood")
+  bomItems       BOMItem[]       @relation("BOMComponent")
+  plans          ProductionPlan[]
+  jobCards       JobCard[]
+  materialIssues MaterialIssue[]
+  materialReturns MaterialReturn[]
+  boxItems       BoxItem[]
+  invoiceItems   InvoiceItem[]
+}
+
+model Tax {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  rate      Float
+  type      String   @default("GST")
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+}
+
+model Transporter {
+  id             String     @id @default(uuid())
+  code           String     @unique
+  name           String
+  contactPerson  String?
+  phone          String?
+  vehicleNumbers String?
+  isActive       Boolean    @default(true)
+  createdAt      DateTime   @default(now())
+  dispatches     Dispatch[]
+}
+
+// -----------------------------------------------------------------------------
+// Purchase & Inwarding (GRN)
+// -----------------------------------------------------------------------------
+
+model PurchaseOrder {
+  id           String              @id @default(uuid())
+  poNumber     String              @unique
+  supplierId   String
+  supplier     Supplier            @relation(fields: [supplierId], references: [id])
+  orderDate    DateTime            @default(now())
+  deliveryDate DateTime?
+  status       String              @default("DRAFT") // DRAFT, SUBMITTED, APPROVED, REJECTED, PARTIAL, COMPLETED, CANCELLED
+  totalAmount  Float               @default(0)
+  taxAmount    Float               @default(0)
+  grandTotal   Float               @default(0)
+  notes        String?
+  createdById  String
+  createdBy    User                @relation("POCreatedBy", fields: [createdById], references: [id])
+  approvedById String?
+  approvedBy   User?               @relation("POApprovedBy", fields: [approvedById], references: [id])
+  approvedAt   DateTime?
+  rejectionReason String?
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+
+  items        PurchaseOrderItem[]
+  grns         GRN[]
+}
+
+model PurchaseOrderItem {
+  id              String        @id @default(uuid())
+  purchaseOrderId String
+  purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  partId          String
+  part            Part          @relation(fields: [partId], references: [id])
+  orderedQty      Float
+  receivedQty     Float         @default(0)
+  unitPrice       Float
+  taxRate         Float         @default(0)
+  lineTotal       Float
+  grnItems        GRNItem[]
+}
+
+model GRN {
+  id                String    @id @default(uuid())
+  grnNumber         String    @unique
+  purchaseOrderId   String
+  purchaseOrder     PurchaseOrder @relation(fields: [purchaseOrderId], references: [id])
+  supplierInvoiceNo String?
+  invoiceDate       DateTime?
+  receivedDate      DateTime  @default(now())
+  status            String    @default("DRAFT") // DRAFT, VERIFIED, REJECTED
+  remarks           String?
+  receivedById      String
+  receivedBy        User      @relation("GRNReceivedBy", fields: [receivedById], references: [id])
+  verifiedAt        DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  items             GRNItem[]
+}
+
+model GRNItem {
+  id              String            @id @default(uuid())
+  grnId           String
+  grn             GRN               @relation(fields: [grnId], references: [id], onDelete: Cascade)
+  poItemId        String
+  poItem          PurchaseOrderItem @relation(fields: [poItemId], references: [id])
+  partId          String
+  part            Part              @relation(fields: [partId], references: [id])
+  receivedQty     Float
+  acceptedQty     Float
+  rejectedQty     Float             @default(0)
+  damagedQty      Float             @default(0)
+  storeId         String
+  store           Store             @relation(fields: [storeId], references: [id])
+  locationId      String?
+  location        Location?         @relation(fields: [locationId], references: [id])
+  batchNumber     String?
+  rejectionReason String?
+}
+
+// -----------------------------------------------------------------------------
+// Inventory & Stock Ledger
+// -----------------------------------------------------------------------------
+
+model Stock {
+  id             String    @id @default(uuid())
+  partId         String
+  part           Part      @relation(fields: [partId], references: [id])
+  storeId        String
+  store          Store     @relation(fields: [storeId], references: [id])
+  locationId     String?
+  location       Location? @relation(fields: [locationId], references: [id])
+  quantityOnHand Float     @default(0)
+  reservedQty    Float     @default(0)
+  batchNumber    String?
+  updatedAt      DateTime  @updatedAt
+
+  @@unique([partId, storeId, locationId, batchNumber])
+}
+
+model StockMovement {
+  id            String    @id @default(uuid())
+  partId        String
+  part          Part      @relation(fields: [partId], references: [id])
+  storeId       String
+  store         Store     @relation(fields: [storeId], references: [id])
+  locationId    String?
+  location      Location? @relation(fields: [locationId], references: [id])
+  movementType  String    // GRN_RECEIPT, PROD_ISSUE, PROD_RECEIPT, ADJUSTMENT_ADD, ADJUSTMENT_SUB, TRANSFER_IN, TRANSFER_OUT, DISPATCH
+  quantity      Float
+  referenceType String?   // GRN, JOB_CARD, INVOICE, MANUAL
+  referenceId   String?
+  batchNumber   String?
+  reason        String?
+  performedById String
+  performedBy   User      @relation("StockMovementUser", fields: [performedById], references: [id])
+  createdAt     DateTime  @default(now())
+}
+
+// -----------------------------------------------------------------------------
+// Production & BOM
+// -----------------------------------------------------------------------------
+
+model BOM {
+  id        String    @id @default(uuid())
+  partId    String
+  part      Part      @relation("BOMFinishedGood", fields: [partId], references: [id])
+  bomCode   String    @unique
+  version   String    @default("1.0")
+  isActive  Boolean   @default(true)
+  notes     String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  items     BOMItem[]
+}
+
+model BOMItem {
+  id               String @id @default(uuid())
+  bomId            String
+  bom              BOM    @relation(fields: [bomId], references: [id], onDelete: Cascade)
+  partId           String
+  part             Part   @relation("BOMComponent", fields: [partId], references: [id])
+  quantityRequired Float
+  scrapPercentage  Float  @default(0)
+}
+
+model Operation {
+  id                  String   @id @default(uuid())
+  code                String   @unique
+  name                String
+  description         String?
+  standardTimeMinutes Float    @default(0)
+  createdAt           DateTime @default(now())
+}
+
+model ProductionPlan {
+  id           String    @id @default(uuid())
+  planNumber   String    @unique
+  partId       String
+  part         Part      @relation(fields: [partId], references: [id])
+  plannedQty   Float
+  completedQty Float     @default(0)
+  startDate    DateTime?
+  endDate      DateTime?
+  status       String    @default("PLANNED") // PLANNED, IN_PROGRESS, COMPLETED, CANCELLED
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  jobCards     JobCard[]
+}
+
+model JobCard {
+  id            String          @id @default(uuid())
+  jobCardNumber String          @unique
+  planId        String?
+  plan          ProductionPlan? @relation(fields: [planId], references: [id])
+  partId        String
+  part          Part            @relation(fields: [partId], references: [id])
+  targetQty     Float
+  producedQty   Float           @default(0)
+  rejectedQty   Float           @default(0)
+  status        String          @default("RELEASED") // RELEASED, IN_PROGRESS, COMPLETED, CANCELLED
+  startDate     DateTime?
+  completedDate DateTime?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  materialIssues  MaterialIssue[]
+  materialReturns MaterialReturn[]
+  boxItems        BoxItem[]
+}
+
+model MaterialIssue {
+  id             String   @id @default(uuid())
+  issueNumber    String   @unique
+  jobCardId      String
+  jobCard        JobCard  @relation(fields: [jobCardId], references: [id])
+  partId         String
+  part           Part     @relation(fields: [partId], references: [id])
+  quantityIssued Float
+  storeId        String
+  store          Store    @relation(fields: [storeId], references: [id])
+  issuedById     String
+  issuedBy       User     @relation("MaterialIssueUser", fields: [issuedById], references: [id])
+  createdAt      DateTime @default(now())
+}
+
+model MaterialReturn {
+  id               String   @id @default(uuid())
+  returnNumber     String   @unique
+  jobCardId        String
+  jobCard          JobCard  @relation(fields: [jobCardId], references: [id])
+  partId           String
+  part             Part     @relation(fields: [partId], references: [id])
+  quantityReturned Float
+  storeId          String
+  store            Store    @relation(fields: [storeId], references: [id])
+  returnedById     String
+  returnedBy       User     @relation("MaterialReturnUser", fields: [returnedById], references: [id])
+  createdAt        DateTime @default(now())
+}
+
+// -----------------------------------------------------------------------------
+// Packing, Boxes & Barcodes
+// -----------------------------------------------------------------------------
+
+model Box {
+  id           String        @id @default(uuid())
+  boxNumber    String        @unique
+  barcode      String        @unique
+  qrCode       String?
+  status       String        @default("OPEN") // OPEN, VERIFIED, SEALED, INVOICED, DISPATCHED
+  netWeight    Float?
+  grossWeight  Float?
+  notes        String?
+  sealedById   String?
+  sealedBy     User?         @relation("BoxSealedBy", fields: [sealedById], references: [id])
+  sealedAt     DateTime?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  items        BoxItem[]
+  dispatchBoxes DispatchBox[]
+}
+
+model BoxItem {
+  id          String   @id @default(uuid())
+  boxId       String
+  box         Box      @relation(fields: [boxId], references: [id], onDelete: Cascade)
+  partId      String
+  part        Part     @relation(fields: [partId], references: [id])
+  quantity    Float
+  batchNumber String?
+  jobCardId   String?
+  jobCard     JobCard? @relation(fields: [jobCardId], references: [id])
+  createdAt   DateTime @default(now())
+}
+
+model Barcode {
+  id         String   @id @default(uuid())
+  code       String   @unique
+  symbology  String   @default("CODE128") // CODE128, QR
+  entityType String   // PART, BOX, DISPATCH, LOT
+  entityId   String?
+  metadata   String?  // JSON string
+  status     String   @default("ACTIVE") // ACTIVE, USED, RETIRED
+  createdAt  DateTime @default(now())
+}
+
+model BarcodeScanHistory {
+  id           String   @id @default(uuid())
+  barcodeCode  String
+  scannedAt    DateTime @default(now())
+  scannedById  String
+  scannedBy    User     @relation(fields: [scannedById], references: [id])
+  deviceInfo   String?
+  scanAction   String   // BOX_PACK, BOX_VERIFY, DISPATCH_VERIFY, AUDIT
+  isSuccess    Boolean  @default(true)
+  errorMessage String?
+}
+
+// -----------------------------------------------------------------------------
+// Billing, Invoices & Dispatch
+// -----------------------------------------------------------------------------
+
+model Invoice {
+  id            String        @id @default(uuid())
+  invoiceNumber String        @unique
+  customerId    String
+  customer      Customer      @relation(fields: [customerId], references: [id])
+  invoiceDate   DateTime      @default(now())
+  subTotal      Float         @default(0)
+  taxAmount     Float         @default(0)
+  grandTotal    Float         @default(0)
+  status        String        @default("DRAFT") // DRAFT, APPROVED, PAID, CANCELLED
+  createdById   String
+  createdBy     User          @relation("InvoiceCreatedBy", fields: [createdById], references: [id])
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  items         InvoiceItem[]
+  dispatches    Dispatch[]
+}
+
+model InvoiceItem {
+  id        String  @id @default(uuid())
+  invoiceId String
+  invoice   Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  partId    String
+  part      Part    @relation(fields: [partId], references: [id])
+  quantity  Float
+  unitPrice Float
+  taxRate   Float   @default(0)
+  lineTotal Float
+}
+
+model Dispatch {
+  id             String        @id @default(uuid())
+  dispatchNumber String        @unique
+  invoiceId      String
+  invoice        Invoice       @relation(fields: [invoiceId], references: [id])
+  customerId     String
+  customer       Customer      @relation(fields: [customerId], references: [id])
+  transporterId  String?
+  transporter    Transporter?  @relation(fields: [transporterId], references: [id])
+  vehicleNumber  String?
+  driverName     String?
+  driverPhone    String?
+  lrNumber       String?
+  dispatchDate   DateTime      @default(now())
+  gateOutTime    DateTime?
+  status         String        @default("PREPARED") // PREPARED, VERIFIED, DISPATCHED
+  createdById    String
+  createdBy      User          @relation("DispatchCreatedBy", fields: [createdById], references: [id])
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  boxes          DispatchBox[]
+}
+
+model DispatchBox {
+  id         String    @id @default(uuid())
+  dispatchId String
+  dispatch   Dispatch  @relation(fields: [dispatchId], references: [id], onDelete: Cascade)
+  boxId      String
+  box        Box       @relation(fields: [boxId], references: [id])
+  verifiedAt DateTime?
+  verifiedBy String?
+
+  @@unique([dispatchId, boxId])
+}
+
+// -----------------------------------------------------------------------------
+// Documents, Audit & Notifications
+// -----------------------------------------------------------------------------
+
+model Document {
+  id           String   @id @default(uuid())
+  title        String
+  entityType   String   // CUSTOMER, PART, PO, GRN, INVOICE
+  entityId     String
+  fileName     String
+  fileUrl      String
+  fileSize     Int
+  mimeType     String
+  version      Int      @default(1)
+  uploadedById String
+  createdAt    DateTime @default(now())
+}
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  userId     String?
+  user       User?    @relation(fields: [userId], references: [id])
+  action     String   // CREATE, UPDATE, DELETE, APPROVE, VERIFY, DISPATCH
+  module     String   // PO, GRN, STOCK, PRODUCTION, PACKING, INVOICE, DISPATCH
+  entityName String
+  entityId   String?
+  oldData    String?  // JSON string
+  newData    String?  // JSON string
+  ipAddress  String?
+  createdAt  DateTime @default(now())
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  title     String
+  message   String
+  type      String   @default("INFO") // INFO, WARNING, SUCCESS, ERROR
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
