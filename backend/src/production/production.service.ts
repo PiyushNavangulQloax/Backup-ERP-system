@@ -277,4 +277,90 @@ export class ProductionService {
       return updatedJob;
     });
   }
+
+  // Return unused materials from Job Card back to Store (FR-10)
+  async returnMaterial(userId: string, data: {
+    jobCardId: string;
+    partId: string;
+    quantityReturned: number;
+    storeId: string;
+    locationId?: string;
+    batchNumber?: string;
+    reason?: string;
+  }) {
+    return this.prisma.$transaction(async (tx) => {
+      const jobCard = await tx.jobCard.findUnique({ where: { id: data.jobCardId } });
+      if (!jobCard) throw new NotFoundException('Job Card not found');
+
+      const stock = await tx.stock.findFirst({
+        where: {
+          partId: data.partId,
+          storeId: data.storeId,
+          locationId: data.locationId || null,
+          batchNumber: data.batchNumber || null,
+        },
+      });
+
+      if (stock) {
+        await tx.stock.update({
+          where: { id: stock.id },
+          data: { quantityOnHand: stock.quantityOnHand + data.quantityReturned },
+        });
+      } else {
+        await tx.stock.create({
+          data: {
+            partId: data.partId,
+            storeId: data.storeId,
+            locationId: data.locationId || null,
+            batchNumber: data.batchNumber || null,
+            quantityOnHand: data.quantityReturned,
+          },
+        });
+      }
+
+      const count = await tx.materialReturn.count();
+      const returnNumber = `RET-${new Date().getFullYear()}-${String(count + 1).padStart(4, '0')}`;
+
+      const matReturn = await tx.materialReturn.create({
+        data: {
+          returnNumber,
+          jobCardId: data.jobCardId,
+          partId: data.partId,
+          quantityReturned: data.quantityReturned,
+          storeId: data.storeId,
+          returnedById: userId,
+        },
+      });
+
+      await tx.stockMovement.create({
+        data: {
+          partId: data.partId,
+          storeId: data.storeId,
+          locationId: data.locationId || null,
+          movementType: 'PROD_RETURN',
+          quantity: data.quantityReturned,
+          referenceType: 'JOB_CARD',
+          referenceId: data.jobCardId,
+          batchNumber: data.batchNumber,
+          reason: data.reason || `Material returned from Job Card #${jobCard.jobCardNumber}`,
+          performedById: userId,
+        },
+      });
+
+      return matReturn;
+    });
+  }
+
+  async getMaterialReturns() {
+    return this.prisma.materialReturn.findMany({
+      include: {
+        jobCard: true,
+        part: { include: { unit: true } },
+        store: true,
+        returnedBy: { select: { id: true, firstName: true, lastName: true, email: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
 }
+

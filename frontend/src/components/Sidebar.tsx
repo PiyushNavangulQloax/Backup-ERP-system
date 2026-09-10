@@ -16,6 +16,7 @@ import {
   Database,
   Users,
   Layers,
+  FileText,
 } from 'lucide-react';
 
 export const Sidebar: React.FC = () => {
@@ -33,6 +34,7 @@ export const Sidebar: React.FC = () => {
         { name: 'Packing & Boxes', path: '/packing', icon: Package, show: hasPermission('packing.view') },
         { name: 'Invoices & Billing', path: '/invoices', icon: Receipt, show: hasPermission('billing.view') },
         { name: 'Dispatch & Gate-Out', path: '/dispatch', icon: Truck, show: hasPermission('dispatch.view') },
+        { name: 'Documents & Drawings', path: '/documents', icon: FileText, show: true },
       ],
     },
     {

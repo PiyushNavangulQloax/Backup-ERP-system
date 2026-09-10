@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api } from '../services/api';
+import { api, downloadFile } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import {
   Truck,
@@ -162,14 +162,13 @@ export const DispatchPage: React.FC = () => {
                         </span>
                       </td>
                       <td className="py-4 px-5 text-right space-x-2">
-                        <a
-                          href={`/api/v1/reports/dispatch/${d.id}/pdf`}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs"
+                        <button
+                          type="button"
+                          onClick={() => downloadFile(`/reports/dispatch/${d.id}/pdf`, `GatePass_${d.dispatchNumber}.pdf`)}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs cursor-pointer"
                         >
                           <FileDown className="w-4 h-4" /> PDF Pass
-                        </a>
+                        </button>
 
                         {d.status === 'PREPARED' && hasPermission('dispatch.gate_out') && (
                           <button

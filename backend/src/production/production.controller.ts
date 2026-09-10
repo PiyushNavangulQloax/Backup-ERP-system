@@ -90,4 +90,17 @@ export class ProductionController {
   completeJobCard(@Req() req: any, @Param('id') id: string, @Body() body: any) {
     return this.productionService.completeJobCard(req.user.id, id, body);
   }
+
+  @Post('material-returns')
+  @RequirePermissions('inventory.return')
+  returnMaterial(@Req() req: any, @Body() body: any) {
+    return this.productionService.returnMaterial(req.user.id, body);
+  }
+
+  @Get('material-returns')
+  @RequirePermissions('production.view')
+  getMaterialReturns() {
+    return this.productionService.getMaterialReturns();
+  }
 }
+
