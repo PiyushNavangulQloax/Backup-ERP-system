@@ -14,6 +14,8 @@ import { DispatchModule } from './dispatch/dispatch.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { ReportsModule } from './reports/reports.module';
 import { AuditModule } from './audit/audit.module';
+import { DocumentsModule } from './documents/documents.module';
+import { NotificationsModule } from './notifications/notifications.module';
 
 @Module({
   imports: [
@@ -32,6 +34,8 @@ import { AuditModule } from './audit/audit.module';
     DashboardModule,
     ReportsModule,
     AuditModule,
+    DocumentsModule,
+    NotificationsModule,
   ],
 })
 export class AppModule {}

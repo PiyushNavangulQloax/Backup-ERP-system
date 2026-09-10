@@ -34,3 +34,24 @@ api.interceptors.response.use(
     return Promise.reject(error);
   }
 );
+
+export const downloadFile = async (endpoint: string, defaultFilename: string) => {
+  const token = localStorage.getItem('access_token');
+  const urlPath = endpoint.startsWith('/api/v1') ? endpoint : `/api/v1${endpoint.startsWith('/') ? '' : '/'}${endpoint}`;
+  const response = await fetch(urlPath, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!response.ok) {
+    throw new Error(`Download failed: ${response.statusText}`);
+  }
+  const blob = await response.blob();
+  const objectUrl = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = objectUrl;
+  a.download = defaultFilename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  window.URL.revokeObjectURL(objectUrl);
+};
+
