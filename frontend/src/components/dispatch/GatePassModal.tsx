@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, downloadFile } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
@@ -15,6 +15,9 @@ import {
   Save,
   ArrowRightCircle,
   QrCode,
+  ScanLine,
+  CheckCircle2,
+  Trash2,
 } from 'lucide-react';
 
 interface GatePassModalProps {
@@ -29,6 +32,11 @@ export const GatePassModal: React.FC<GatePassModalProps> = ({
   const queryClient = useQueryClient();
   const { hasPermission } = useAuth();
   const [downloading, setDownloading] = useState(false);
+  const scanInputRef = useRef<HTMLInputElement>(null);
+
+  // Inline scanner state
+  const [scanInput, setScanInput] = useState('');
+  const [scanFeedback, setScanFeedback] = useState<{ ok: boolean; msg: string } | null>(null);
 
   // Local checklist state for live interactive edits before saving
   const [checklist, setChecklist] = useState<any>(null);
@@ -60,6 +68,66 @@ export const GatePassModal: React.FC<GatePassModalProps> = ({
       alert(err.response?.data?.message || 'Failed to update verification checklist');
     },
   });
+
+  // Inline scan mutation for box verification
+  const inlineScanMutation = useMutation({
+    mutationFn: async (code: string) => {
+      return (await api.post('/barcodes/scan', {
+        code,
+        scanAction: 'DISPATCH_VERIFY',
+        targetDispatchId: dispatchId,
+        deviceInfo: 'Gate Pass Inline Scanner',
+      })).data;
+    },
+    onSuccess: () => {
+      setScanFeedback({ ok: true, msg: '✅ Box verified successfully!' });
+      setScanInput('');
+      queryClient.invalidateQueries({ queryKey: ['security-gate-pass', dispatchId] });
+      queryClient.invalidateQueries({ queryKey: ['dispatches'] });
+      setTimeout(() => setScanFeedback(null), 3000);
+      scanInputRef.current?.focus();
+    },
+    onError: (err: any) => {
+      const msg = err.response?.data?.message || 'Scan rejected';
+      setScanFeedback({ ok: false, msg: `❌ ${msg}` });
+      setScanInput('');
+      setTimeout(() => setScanFeedback(null), 4000);
+      scanInputRef.current?.focus();
+    },
+  });
+
+  // Unverify (delete scan) mutation
+  const unverifyMutation = useMutation({
+    mutationFn: async (boxId: string) => {
+      return (await api.post(`/dispatches/${dispatchId}/unverify-box`, { boxId })).data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['security-gate-pass', dispatchId] });
+      queryClient.invalidateQueries({ queryKey: ['dispatches'] });
+    },
+    onError: (err: any) => {
+      alert(err.response?.data?.message || 'Failed to remove verification');
+    },
+  });
+
+  const handleInlineScan = (e: React.FormEvent) => {
+    e.preventDefault();
+    const code = scanInput.trim();
+    if (!code) return;
+    // Check for duplicate scan (already verified box)
+    const alreadyVerified = materials.some(
+      (m: any) => m.verified && (m.boxBarcode?.toLowerCase() === code.toLowerCase() || m.boxNumber?.toLowerCase() === code.toLowerCase())
+    );
+    if (alreadyVerified) {
+      setScanFeedback({ ok: false, msg: '⚠️ This box is already scanned and verified. Use the 🗑 button to remove it if needed.' });
+      setScanInput('');
+      setTimeout(() => setScanFeedback(null), 5000);
+      scanInputRef.current?.focus();
+      return;
+    }
+    inlineScanMutation.mutate(code);
+  };
+
 
   const gateOutMutation = useMutation({
     mutationFn: async () => {
@@ -325,6 +393,112 @@ export const GatePassModal: React.FC<GatePassModalProps> = ({
               </table>
             </div>
           </div>
+
+          {/* SECTION 5B: INLINE BOX BARCODE SCANNER — SCAN RIGHT HERE */}
+          {!isGateOut && (
+            <div className="border-2 border-blue-400 rounded-2xl overflow-hidden bg-blue-50/40 print:hidden">
+              <div className="bg-blue-600 text-white px-4 py-3 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <ScanLine className="w-5 h-5 animate-pulse" />
+                  <span className="font-black text-sm uppercase tracking-wide">Scan Boxes to Verify — Right Here</span>
+                </div>
+                <span className="text-xs font-bold text-blue-200">
+                  {materials.filter((m: any) => m.verified).length} / {materials.length} boxes verified
+                </span>
+              </div>
+
+              {/* Progress Bar */}
+              <div className="h-2 bg-blue-200">
+                <div
+                  className="h-2 bg-emerald-500 transition-all duration-500"
+                  style={{ width: `${materials.length > 0 ? (materials.filter((m: any) => m.verified).length / materials.length) * 100 : 0}%` }}
+                />
+              </div>
+
+              <div className="p-4 space-y-3">
+                {/* Box Status List */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {materials.map((m: any, idx: number) => (
+                    <div
+                      key={idx}
+                      className={`flex items-center gap-2.5 px-3 py-2 rounded-xl border text-xs font-bold ${
+                        m.verified
+                          ? 'bg-emerald-50 border-emerald-300 text-emerald-800'
+                          : 'bg-white border-amber-300 text-slate-700'
+                      }`}
+                    >
+                      {m.verified
+                        ? <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+                        : <div className="w-4 h-4 rounded-full border-2 border-amber-400 flex-shrink-0" />}
+                      <div className="min-w-0 flex-1">
+                        <span className="font-mono font-black block truncate">{m.boxNumber}</span>
+                        <span className="text-[10px] font-mono text-slate-500 truncate block">{m.boxBarcode}</span>
+                      </div>
+                      {m.verified ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (confirm(`Remove verification for ${m.boxNumber}?`)) {
+                              unverifyMutation.mutate(m.boxId);
+                            }
+                          }}
+                          disabled={unverifyMutation.isPending}
+                          className="ml-1 p-1.5 rounded-lg text-rose-400 hover:text-rose-700 hover:bg-rose-50 transition-colors flex-shrink-0"
+                          title="Remove scan verification"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      ) : (
+                        <span className="text-[10px] font-black px-2 py-0.5 rounded-full whitespace-nowrap bg-amber-100 text-amber-800">
+                          ⏳ SCAN
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+
+                {/* Scanner Input */}
+                <form onSubmit={handleInlineScan} className="flex gap-2">
+                  <div className="relative flex-1">
+                    <ScanLine className="w-4 h-4 text-blue-500 absolute left-3 top-1/2 -translate-y-1/2" />
+                    <input
+                      ref={scanInputRef}
+                      type="text"
+                      autoFocus
+                      value={scanInput}
+                      onChange={(e) => setScanInput(e.target.value)}
+                      placeholder="Scan or type box barcode (e.g. BOX-20260911-0003)..."
+                      className="w-full bg-white border-2 border-blue-400 rounded-xl pl-9 pr-3 py-2.5 text-xs font-mono font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 placeholder:text-slate-400"
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={inlineScanMutation.isPending || !scanInput.trim()}
+                    className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-black text-xs shadow transition-all"
+                  >
+                    {inlineScanMutation.isPending ? 'Verifying...' : 'Verify'}
+                  </button>
+                </form>
+
+                {/* Feedback */}
+                {scanFeedback && (
+                  <div className={`px-4 py-2.5 rounded-xl text-xs font-bold border ${
+                    scanFeedback.ok
+                      ? 'bg-emerald-50 border-emerald-300 text-emerald-800'
+                      : 'bg-rose-50 border-rose-300 text-rose-800'
+                  }`}>
+                    {scanFeedback.msg}
+                  </div>
+                )}
+
+                {materials.length > 0 && materials.every((m: any) => m.verified) && (
+                  <div className="px-4 py-3 rounded-xl bg-emerald-600 text-white text-xs font-black text-center">
+                    🎉 All boxes verified! Click "Authorize Gate Out" above.
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* SECTION 6: INTERACTIVE SECURITY VERIFICATION CHECKLIST (SIDE BY SIDE WITH SEAL & TIMESTAMPS) */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">

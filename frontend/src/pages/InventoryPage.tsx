@@ -1,16 +1,20 @@
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../services/api';
+import { useSearch } from '../context/SearchContext';
 import {
   Boxes,
   Layers,
   History,
   AlertCircle,
   Warehouse,
+  Search,
+  X,
 } from 'lucide-react';
 
 export const InventoryPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'balance' | 'ledger'>('balance');
+  const { searchQuery, setSearchQuery } = useSearch();
 
   const { data: stocks, isLoading: isStocksLoading } = useQuery({
     queryKey: ['inventory-stock'],
@@ -21,6 +25,33 @@ export const InventoryPage: React.FC = () => {
     queryKey: ['inventory-ledger'],
     queryFn: async () => (await api.get('/inventory/ledger')).data,
     enabled: activeTab === 'ledger',
+  });
+
+  const q = searchQuery.toLowerCase().trim();
+
+  const filteredStocks = stocks?.filter((s: any) => {
+    if (!q) return true;
+    return (
+      s.part?.code?.toLowerCase().includes(q) ||
+      s.part?.name?.toLowerCase().includes(q) ||
+      s.part?.partType?.toLowerCase().includes(q) ||
+      s.store?.name?.toLowerCase().includes(q) ||
+      s.location?.code?.toLowerCase().includes(q) ||
+      s.batchNumber?.toLowerCase().includes(q)
+    );
+  });
+
+  const filteredLedger = ledger?.filter((m: any) => {
+    if (!q) return true;
+    return (
+      m.part?.name?.toLowerCase().includes(q) ||
+      m.part?.code?.toLowerCase().includes(q) ||
+      m.movementType?.toLowerCase().includes(q) ||
+      m.store?.name?.toLowerCase().includes(q) ||
+      m.reason?.toLowerCase().includes(q) ||
+      m.performedBy?.firstName?.toLowerCase().includes(q) ||
+      m.performedBy?.lastName?.toLowerCase().includes(q)
+    );
   });
 
   return (
@@ -37,31 +68,54 @@ export const InventoryPage: React.FC = () => {
         </p>
       </div>
 
-      {/* Tabs */}
-      <div className="flex items-center gap-2">
-        <button
-          onClick={() => setActiveTab('balance')}
-          className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-black transition-all ${
-            activeTab === 'balance'
-              ? 'bg-blue-600 text-white shadow-md'
-              : 'bg-white text-slate-700 hover:bg-slate-200 border border-slate-300'
-          }`}
-        >
-          <Layers className="w-4 h-4 stroke-[2.5]" />
-          <span>Warehouse Stock Positions</span>
-        </button>
+      {/* Tabs & Search Toolbar */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setActiveTab('balance')}
+            className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-black transition-all ${
+              activeTab === 'balance'
+                ? 'bg-blue-600 text-white shadow-md'
+                : 'bg-white text-slate-700 hover:bg-slate-200 border border-slate-300'
+            }`}
+          >
+            <Layers className="w-4 h-4 stroke-[2.5]" />
+            <span>Warehouse Stock Positions</span>
+          </button>
 
-        <button
-          onClick={() => setActiveTab('ledger')}
-          className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-black transition-all ${
-            activeTab === 'ledger'
-              ? 'bg-blue-600 text-white shadow-md'
-              : 'bg-white text-slate-700 hover:bg-slate-200 border border-slate-300'
-          }`}
-        >
-          <History className="w-4 h-4 stroke-[2.5]" />
-          <span>Immutable Movement Ledger</span>
-        </button>
+          <button
+            onClick={() => setActiveTab('ledger')}
+            className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-black transition-all ${
+              activeTab === 'ledger'
+                ? 'bg-blue-600 text-white shadow-md'
+                : 'bg-white text-slate-700 hover:bg-slate-200 border border-slate-300'
+            }`}
+          >
+            <History className="w-4 h-4 stroke-[2.5]" />
+            <span>Immutable Movement Ledger</span>
+          </button>
+        </div>
+
+        {/* Search Bar */}
+        <div className="relative w-full md:w-80">
+          <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder={activeTab === 'balance' ? 'Search part, store, lot #...' : 'Search ledger item, type...'}
+            className="w-full bg-white border border-slate-300 rounded-xl pl-10 pr-9 py-2 text-xs font-semibold text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600 shadow-sm transition-all"
+          />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery('')}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 p-0.5 rounded-md hover:bg-slate-100 transition-colors"
+              title="Clear search"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Tables */}

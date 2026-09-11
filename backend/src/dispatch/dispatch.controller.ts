@@ -54,6 +54,16 @@ export class DispatchController {
     return this.dispatchService.verifyBox(id, body.boxId, req.user.id);
   }
 
+  @Post(':id/unverify-box')
+  @RequirePermissions('barcode.scan')
+  unverifyBox(
+    @Param('id') id: string,
+    @Body() body: { boxId: string },
+  ) {
+    return this.dispatchService.unverifyBox(id, body.boxId);
+  }
+
+
   @Post(':id/gate-out')
   @RequirePermissions('dispatch.gate_out')
   gateOut(@Req() req: any, @Param('id') id: string) {

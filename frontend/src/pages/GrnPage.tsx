@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../services/api';
 import { useAuth } from '../context/AuthContext';
+import { useSearch } from '../context/SearchContext';
 import {
   PackageCheck,
   Plus,
@@ -9,16 +10,31 @@ import {
   AlertTriangle,
   Building,
   X,
+  Search,
 } from 'lucide-react';
 
 export const GrnPage: React.FC = () => {
   const queryClient = useQueryClient();
   const { hasPermission } = useAuth();
+  const { searchQuery, setSearchQuery } = useSearch();
   const [isCreateOpen, setIsCreateOpen] = useState(false);
 
   const { data: grns, isLoading } = useQuery({
     queryKey: ['grns'],
     queryFn: async () => (await api.get('/grns')).data,
+  });
+
+  const filteredGrns = grns?.filter((g: any) => {
+    if (!searchQuery.trim()) return true;
+    const q = searchQuery.toLowerCase().trim();
+    return (
+      g.grnNumber?.toLowerCase().includes(q) ||
+      g.purchaseOrder?.poNumber?.toLowerCase().includes(q) ||
+      g.purchaseOrder?.supplier?.name?.toLowerCase().includes(q) ||
+      g.supplierInvoiceNo?.toLowerCase().includes(q) ||
+      g.status?.toLowerCase().includes(q) ||
+      g.items?.some((it: any) => it.batchNumber?.toLowerCase().includes(q) || it.part?.name?.toLowerCase().includes(q))
+    );
   });
 
   const { data: approvedPOs } = useQuery({
@@ -117,6 +133,29 @@ export const GrnPage: React.FC = () => {
         )}
       </div>
 
+      {/* In-Page Search Toolbar */}
+      <div className="flex justify-end">
+        <div className="relative w-full sm:w-80">
+          <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search GRN #, PO #, supplier, batch..."
+            className="w-full bg-white border border-slate-300 rounded-xl pl-10 pr-9 py-2 text-xs font-semibold text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600 shadow-sm transition-all"
+          />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery('')}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 p-0.5 rounded-md hover:bg-slate-100 transition-colors"
+              title="Clear search"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
+      </div>
+
       <div className="bg-white border border-slate-300 rounded-2xl overflow-hidden shadow-md">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
@@ -134,8 +173,23 @@ export const GrnPage: React.FC = () => {
             <tbody className="divide-y divide-slate-200">
               {isLoading ? (
                 <tr><td colSpan={7} className="text-center py-12 text-slate-600 font-bold">Loading GRN receipts...</td></tr>
+              ) : filteredGrns?.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="text-center py-12 text-slate-500 font-medium">
+                    {searchQuery ? (
+                      <span>
+                        No GRNs found matching &ldquo;<span className="font-bold text-slate-800">{searchQuery}</span>&rdquo;.{' '}
+                        <button onClick={() => setSearchQuery('')} className="text-blue-600 underline font-bold ml-1 hover:text-blue-800">
+                          Clear search
+                        </button>
+                      </span>
+                    ) : (
+                      <span>No GRN receipts recorded yet.</span>
+                    )}
+                  </td>
+                </tr>
               ) : (
-                grns?.map((g: any) => (
+                filteredGrns?.map((g: any) => (
                   <tr key={g.id} className="hover:bg-slate-50 transition-colors">
                     <td className="py-4 px-5 font-mono font-black text-blue-700 text-base">{g.grnNumber}</td>
                     <td className="py-4 px-5 font-mono text-slate-800 font-bold">{g.purchaseOrder?.poNumber}</td>

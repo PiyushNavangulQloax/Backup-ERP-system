@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../services/api';
 import { useAuth } from '../context/AuthContext';
+import { useSearch } from '../context/SearchContext';
 import {
   Package,
   Plus,
@@ -9,16 +10,45 @@ import {
   Unlock,
   Printer,
   X,
+  Search,
 } from 'lucide-react';
 
 export const PackingPage: React.FC = () => {
   const queryClient = useQueryClient();
   const { hasPermission } = useAuth();
+  const { searchQuery, setSearchQuery } = useSearch();
   const [selectedBox, setSelectedBox] = useState<any | null>(null);
+  const [barcodeDataUrl, setBarcodeDataUrl] = useState<string | null>(null);
+
+  // Fetch barcode as base64 data URL so it renders correctly on print
+  useEffect(() => {
+    if (!selectedBox?.barcode) { setBarcodeDataUrl(null); return; }
+    api.get(`/barcodes/image/${selectedBox.barcode}`, { responseType: 'arraybuffer' })
+      .then((res) => {
+        const base64 = btoa(
+          new Uint8Array(res.data).reduce((d, b) => d + String.fromCharCode(b), '')
+        );
+        setBarcodeDataUrl(`data:image/png;base64,${base64}`);
+      })
+      .catch(() => setBarcodeDataUrl(null));
+  }, [selectedBox?.barcode]);
+
 
   const { data: boxes, isLoading } = useQuery({
     queryKey: ['boxes'],
     queryFn: async () => (await api.get('/packing/boxes')).data,
+  });
+
+  // Filter boxes by search query
+  const filteredBoxes = boxes?.filter((b: any) => {
+    if (!searchQuery.trim()) return true;
+    const q = searchQuery.toLowerCase().trim();
+    return (
+      b.boxNumber?.toLowerCase().includes(q) ||
+      b.barcode?.toLowerCase().includes(q) ||
+      b.status?.toLowerCase().includes(q) ||
+      b.items?.some((item: any) => item.part?.name?.toLowerCase().includes(q))
+    );
   });
 
   const { data: parts } = useQuery({
@@ -104,6 +134,27 @@ export const PackingPage: React.FC = () => {
         )}
       </div>
 
+      {/* Search Input */}
+      <div className="relative w-full md:w-80">
+        <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+        <input
+          type="text"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder="Search box number, barcode, part..."
+          className="w-full bg-white border border-slate-300 rounded-xl pl-10 pr-9 py-2 text-xs font-semibold text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600 shadow-sm transition-all"
+        />
+        {searchQuery && (
+          <button
+            onClick={() => setSearchQuery('')}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 p-0.5 rounded-md hover:bg-slate-100 transition-colors"
+            title="Clear search"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        )}
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left Column: Boxes list */}
         <div className="lg:col-span-2 bg-white border border-slate-300 rounded-2xl overflow-hidden shadow-md no-print">
@@ -122,7 +173,7 @@ export const PackingPage: React.FC = () => {
                 {isLoading ? (
                   <tr><td colSpan={5} className="text-center py-12 text-slate-600 font-bold">Loading boxes...</td></tr>
                 ) : (
-                  boxes?.map((b: any) => (
+                  filteredBoxes?.map((b: any) => (
                     <tr
                       key={b.id}
                       onClick={() => setSelectedBox(b)}
@@ -183,12 +234,22 @@ export const PackingPage: React.FC = () => {
               </div>
 
               {/* Barcode Preview */}
-              <div className="p-4 rounded-xl bg-slate-50 border border-slate-300 flex flex-col items-center justify-center space-y-2">
-                <img
-                  src={`/api/v1/barcodes/image/${selectedBox.barcode}`}
-                  alt="Box Barcode"
-                  className="max-h-20 object-contain"
-                />
+              <div
+                className="p-4 rounded-xl bg-white border-2 border-slate-900 flex flex-col items-center justify-center space-y-2"
+                style={{ WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' } as any}
+              >
+                {barcodeDataUrl ? (
+                  <img
+                    src={barcodeDataUrl}
+                    alt="Box Barcode"
+                    className="w-full object-contain"
+                    style={{ maxHeight: '80px', imageRendering: 'crisp-edges' }}
+                  />
+                ) : (
+                  <div className="h-16 flex items-center justify-center text-xs text-slate-400 font-mono animate-pulse">
+                    Loading barcode...
+                  </div>
+                )}
                 <p className="text-[11px] font-mono font-black text-slate-900 uppercase tracking-widest">
                   APEX MANUFACTURING &bull; {selectedBox.boxNumber}
                 </p>
@@ -212,33 +273,34 @@ export const PackingPage: React.FC = () => {
 
               {/* Add form */}
               {selectedBox.status === 'OPEN' && hasPermission('packing.manage') && (
-                <form onSubmit={handleAddItem} className="pt-3 border-t border-slate-200 space-y-2.5 no-print">
+                <form onSubmit={handleAddItem} className="pt-3 border-t border-slate-200 space-y-2 no-print">
                   <label className="text-xs font-black text-slate-800 uppercase tracking-wider block">Add Item into Box</label>
+                  <select
+                    value={itemPartId}
+                    onChange={(e) => setItemPartId(e.target.value)}
+                    required
+                    className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-900"
+                  >
+                    <option value="">Choose Part...</option>
+                    {parts?.map((p: any) => (
+                      <option key={p.id} value={p.id} className="text-slate-900 font-bold">{p.name}</option>
+                    ))}
+                  </select>
                   <div className="flex gap-2">
-                    <select
-                      value={itemPartId}
-                      onChange={(e) => setItemPartId(e.target.value)}
-                      required
-                      className="flex-1 bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-900"
-                    >
-                      <option value="">Choose Part...</option>
-                      {parts?.map((p: any) => (
-                        <option key={p.id} value={p.id} className="text-slate-900 font-bold">{p.name}</option>
-                      ))}
-                    </select>
                     <input
                       type="number"
                       min="1"
                       value={itemQty}
                       onChange={(e) => setItemQty(parseFloat(e.target.value) || 1)}
-                      className="w-16 bg-white border border-slate-300 rounded-xl px-2 py-2 text-xs font-mono font-bold text-slate-900 text-center"
+                      className="w-24 bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-mono font-bold text-slate-900 text-center"
+                      placeholder="Qty"
                     />
                     <button
                       type="submit"
                       disabled={addItemMutation.isPending}
-                      className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-black cursor-pointer"
+                      className="flex-1 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-black cursor-pointer transition-colors"
                     >
-                      Add
+                      {addItemMutation.isPending ? 'Adding...' : 'Add to Box'}
                     </button>
                   </div>
                 </form>

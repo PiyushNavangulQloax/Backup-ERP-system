@@ -167,6 +167,13 @@ export class BarcodesService {
           throw new BadRequestException('This box is not assigned to this dispatch manifest');
         }
 
+        // Block duplicate scan — box is already verified
+        if (dispatchBox.verifiedAt) {
+          throw new BadRequestException(
+            `Box ${record.entity.boxNumber} is already scanned & verified. Use the Delete (🗑) button in the Gate Pass to remove it first.`
+          );
+        }
+
         await this.prisma.dispatchBox.update({
           where: { id: dispatchBox.id },
           data: { verifiedAt: new Date(), verifiedBy: userId },

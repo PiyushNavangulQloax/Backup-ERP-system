@@ -10,10 +10,14 @@ import {
   Plus,
   X,
   AlertCircle,
+  Search,
 } from 'lucide-react';
+
+import { useSearch } from '../context/SearchContext';
 
 export const MastersPage: React.FC = () => {
   const queryClient = useQueryClient();
+  const { searchQuery, setSearchQuery } = useSearch();
   const [tab, setTab] = useState<'parts' | 'customers' | 'suppliers' | 'stores'>('parts');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
@@ -245,6 +249,71 @@ export const MastersPage: React.FC = () => {
     }
   };
 
+  const getSearchPlaceholder = () => {
+    switch (tab) {
+      case 'parts':
+        return 'Search parts by name, code, barcode...';
+      case 'customers':
+        return 'Search customers by name, code, GSTIN, email...';
+      case 'suppliers':
+        return 'Search suppliers by name, code, GSTIN, phone...';
+      case 'stores':
+        return 'Search stores by code, name, category, rack...';
+    }
+  };
+
+  const filteredParts = parts?.filter((p: any) => {
+    if (!searchQuery.trim()) return true;
+    const q = searchQuery.toLowerCase().trim();
+    return (
+      p.code?.toLowerCase().includes(q) ||
+      p.name?.toLowerCase().includes(q) ||
+      p.barcodeValue?.toLowerCase().includes(q) ||
+      p.partType?.toLowerCase().includes(q) ||
+      p.hsnCode?.toLowerCase().includes(q) ||
+      p.unit?.symbol?.toLowerCase().includes(q)
+    );
+  });
+
+  const filteredCustomers = customers?.filter((c: any) => {
+    if (!searchQuery.trim()) return true;
+    const q = searchQuery.toLowerCase().trim();
+    return (
+      c.code?.toLowerCase().includes(q) ||
+      c.name?.toLowerCase().includes(q) ||
+      c.gstin?.toLowerCase().includes(q) ||
+      c.email?.toLowerCase().includes(q) ||
+      c.phone?.toLowerCase().includes(q) ||
+      c.billingAddress?.toLowerCase().includes(q) ||
+      c.shippingAddress?.toLowerCase().includes(q)
+    );
+  });
+
+  const filteredSuppliers = suppliers?.filter((s: any) => {
+    if (!searchQuery.trim()) return true;
+    const q = searchQuery.toLowerCase().trim();
+    return (
+      s.code?.toLowerCase().includes(q) ||
+      s.name?.toLowerCase().includes(q) ||
+      s.gstin?.toLowerCase().includes(q) ||
+      s.email?.toLowerCase().includes(q) ||
+      s.phone?.toLowerCase().includes(q) ||
+      s.paymentTerms?.toLowerCase().includes(q) ||
+      s.address?.toLowerCase().includes(q)
+    );
+  });
+
+  const filteredStores = stores?.filter((st: any) => {
+    if (!searchQuery.trim()) return true;
+    const q = searchQuery.toLowerCase().trim();
+    return (
+      st.code?.toLowerCase().includes(q) ||
+      st.name?.toLowerCase().includes(q) ||
+      st.type?.toLowerCase().includes(q) ||
+      st.locations?.some((l: any) => l.code?.toLowerCase().includes(q))
+    );
+  });
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-4 border-b border-slate-200">
@@ -269,33 +338,57 @@ export const MastersPage: React.FC = () => {
         </button>
       </div>
 
-      {/* Tabs */}
-      <div className="flex items-center gap-3">
-        {[
-          { id: 'parts', label: 'Parts & Materials', icon: Boxes },
-          { id: 'customers', label: 'Customers', icon: Users },
-          { id: 'suppliers', label: 'Suppliers & Vendors', icon: Building },
-          { id: 'stores', label: 'Stores & Racks', icon: Warehouse },
-        ].map((t) => {
-          const Icon = t.icon;
-          return (
+      {/* Tabs & Search Toolbar */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        {/* Tabs */}
+        <div className="flex items-center gap-2 overflow-x-auto pb-1 md:pb-0">
+          {[
+            { id: 'parts', label: 'Parts & Materials', icon: Boxes },
+            { id: 'customers', label: 'Customers', icon: Users },
+            { id: 'suppliers', label: 'Suppliers & Vendors', icon: Building },
+            { id: 'stores', label: 'Stores & Racks', icon: Warehouse },
+          ].map((t) => {
+            const Icon = t.icon;
+            return (
+              <button
+                key={t.id}
+                onClick={() => {
+                  setTab(t.id as any);
+                  setIsModalOpen(false);
+                }}
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black transition-all whitespace-nowrap ${
+                  tab === t.id
+                    ? 'bg-blue-600 text-white shadow-md'
+                    : 'bg-white text-slate-700 hover:bg-slate-200 border border-slate-300'
+                }`}
+              >
+                <Icon className="w-4 h-4 stroke-[2.5]" />
+                <span>{t.label}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* In-Page Table Search Input */}
+        <div className="relative w-full md:w-80">
+          <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder={getSearchPlaceholder()}
+            className="w-full bg-white border border-slate-300 rounded-xl pl-10 pr-9 py-2.5 text-xs font-semibold text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600 shadow-sm transition-all"
+          />
+          {searchQuery && (
             <button
-              key={t.id}
-              onClick={() => {
-                setTab(t.id as any);
-                setIsModalOpen(false);
-              }}
-              className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-black transition-all ${
-                tab === t.id
-                  ? 'bg-blue-600 text-white shadow-md'
-                  : 'bg-white text-slate-700 hover:bg-slate-200 border border-slate-300'
-              }`}
+              onClick={() => setSearchQuery('')}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 p-0.5 rounded-md hover:bg-slate-100 transition-colors"
+              title="Clear search"
             >
-              <Icon className="w-4 h-4 stroke-[2.5]" />
-              <span>{t.label}</span>
+              <X className="w-3.5 h-3.5" />
             </button>
-          );
-        })}
+          )}
+        </div>
       </div>
 
       {/* Table Container */}
@@ -316,9 +409,22 @@ export const MastersPage: React.FC = () => {
               <tbody className="divide-y divide-slate-200">
                 {isPartsLoading ? (
                   <tr><td colSpan={6} className="text-center py-12 text-slate-600 font-bold">Loading parts...</td></tr>
-                ) : parts?.length === 0 ? (
-                  <tr><td colSpan={6} className="text-center py-12 text-slate-500 font-medium">No parts found. Click &quot;Add Part&quot; to create one.</td></tr>
-                ) : parts?.map((p: any) => (
+                ) : filteredParts?.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="text-center py-12 text-slate-500 font-medium">
+                      {searchQuery ? (
+                        <span>
+                          No parts found matching &ldquo;<span className="font-bold text-slate-800">{searchQuery}</span>&rdquo;.{' '}
+                          <button onClick={() => setSearchQuery('')} className="text-blue-600 underline font-bold ml-1 hover:text-blue-800">
+                            Clear search
+                          </button>
+                        </span>
+                      ) : (
+                        <span>No parts found. Click &quot;Add Part&quot; to create one.</span>
+                      )}
+                    </td>
+                  </tr>
+                ) : filteredParts?.map((p: any) => (
                   <tr key={p.id} className="hover:bg-slate-50 transition-colors">
                     <td className="py-4 px-5 font-mono font-black text-blue-700 text-base">{p.code}</td>
                     <td className="py-4 px-5 text-slate-900 font-bold">{p.name}</td>
@@ -352,9 +458,22 @@ export const MastersPage: React.FC = () => {
               <tbody className="divide-y divide-slate-200">
                 {isCustomersLoading ? (
                   <tr><td colSpan={5} className="text-center py-12 text-slate-600 font-bold">Loading customers...</td></tr>
-                ) : customers?.length === 0 ? (
-                  <tr><td colSpan={5} className="text-center py-12 text-slate-500 font-medium">No customers found. Click &quot;Add Customer&quot; to create one.</td></tr>
-                ) : customers?.map((c: any) => (
+                ) : filteredCustomers?.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="text-center py-12 text-slate-500 font-medium">
+                      {searchQuery ? (
+                        <span>
+                          No customers found matching &ldquo;<span className="font-bold text-slate-800">{searchQuery}</span>&rdquo;.{' '}
+                          <button onClick={() => setSearchQuery('')} className="text-blue-600 underline font-bold ml-1 hover:text-blue-800">
+                            Clear search
+                          </button>
+                        </span>
+                      ) : (
+                        <span>No customers found. Click &quot;Add Customer&quot; to create one.</span>
+                      )}
+                    </td>
+                  </tr>
+                ) : filteredCustomers?.map((c: any) => (
                   <tr key={c.id} className="hover:bg-slate-50 transition-colors">
                     <td className="py-4 px-5 font-mono font-black text-blue-700 text-base">{c.code}</td>
                     <td className="py-4 px-5 text-slate-900 font-bold">{c.name}</td>
@@ -381,9 +500,22 @@ export const MastersPage: React.FC = () => {
               <tbody className="divide-y divide-slate-200">
                 {isSuppliersLoading ? (
                   <tr><td colSpan={5} className="text-center py-12 text-slate-600 font-bold">Loading suppliers...</td></tr>
-                ) : suppliers?.length === 0 ? (
-                  <tr><td colSpan={5} className="text-center py-12 text-slate-500 font-medium">No suppliers found. Click &quot;Add Supplier&quot; to create one.</td></tr>
-                ) : suppliers?.map((s: any) => (
+                ) : filteredSuppliers?.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="text-center py-12 text-slate-500 font-medium">
+                      {searchQuery ? (
+                        <span>
+                          No suppliers found matching &ldquo;<span className="font-bold text-slate-800">{searchQuery}</span>&rdquo;.{' '}
+                          <button onClick={() => setSearchQuery('')} className="text-blue-600 underline font-bold ml-1 hover:text-blue-800">
+                            Clear search
+                          </button>
+                        </span>
+                      ) : (
+                        <span>No suppliers found. Click &quot;Add Supplier&quot; to create one.</span>
+                      )}
+                    </td>
+                  </tr>
+                ) : filteredSuppliers?.map((s: any) => (
                   <tr key={s.id} className="hover:bg-slate-50 transition-colors">
                     <td className="py-4 px-5 font-mono font-black text-blue-700 text-base">{s.code}</td>
                     <td className="py-4 px-5 text-slate-900 font-bold">{s.name}</td>
@@ -413,9 +545,22 @@ export const MastersPage: React.FC = () => {
               <tbody className="divide-y divide-slate-200">
                 {isStoresLoading ? (
                   <tr><td colSpan={4} className="text-center py-12 text-slate-600 font-bold">Loading stores...</td></tr>
-                ) : stores?.length === 0 ? (
-                  <tr><td colSpan={4} className="text-center py-12 text-slate-500 font-medium">No stores found. Click &quot;Add Store&quot; to create one.</td></tr>
-                ) : stores?.map((st: any) => (
+                ) : filteredStores?.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} className="text-center py-12 text-slate-500 font-medium">
+                      {searchQuery ? (
+                        <span>
+                          No stores found matching &ldquo;<span className="font-bold text-slate-800">{searchQuery}</span>&rdquo;.{' '}
+                          <button onClick={() => setSearchQuery('')} className="text-blue-600 underline font-bold ml-1 hover:text-blue-800">
+                            Clear search
+                          </button>
+                        </span>
+                      ) : (
+                        <span>No stores found. Click &quot;Add Store&quot; to create one.</span>
+                      )}
+                    </td>
+                  </tr>
+                ) : filteredStores?.map((st: any) => (
                   <tr key={st.id} className="hover:bg-slate-50 transition-colors">
                     <td className="py-4 px-5 font-mono font-black text-blue-700 text-base">{st.code}</td>
                     <td className="py-4 px-5 text-slate-900 font-bold">{st.name}</td>

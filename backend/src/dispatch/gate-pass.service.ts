@@ -271,6 +271,7 @@ export class GatePassService {
               packages: 1,
               boxNumber: box.boxNumber,
               boxBarcode: box.barcode,
+              boxId: box.id,
               verified: !!db.verifiedAt || dispatch.status === 'DISPATCHED',
             });
           });

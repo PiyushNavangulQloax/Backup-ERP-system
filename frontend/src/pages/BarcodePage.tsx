@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../services/api';
 import { useAuth } from '../context/AuthContext';
+import { useSearch } from '../context/SearchContext';
 import {
   Barcode,
   ScanLine,
@@ -16,6 +17,7 @@ import {
 export const BarcodePage: React.FC = () => {
   const queryClient = useQueryClient();
   const { user } = useAuth();
+  const { searchQuery, setSearchQuery } = useSearch();
   const [scannedInput, setScannedInput] = useState('');
   const [scanAction, setScanAction] = useState<'LOOKUP' | 'BOX_PACK' | 'DISPATCH_VERIFY'>('LOOKUP');
   const [activeBoxId, setActiveBoxId] = useState('');
@@ -28,6 +30,18 @@ export const BarcodePage: React.FC = () => {
     queryKey: ['barcode-history'],
     queryFn: async () => (await api.get('/barcodes/history')).data,
     refetchInterval: 5000,
+  });
+
+  // Filter scan history by search query
+  const filteredHistory = history?.filter((h: any) => {
+    if (!searchQuery.trim()) return true;
+    const q = searchQuery.toLowerCase().trim();
+    return (
+      h.barcodeCode?.toLowerCase().includes(q) ||
+      h.scanAction?.toLowerCase().includes(q) ||
+      h.scannedBy?.firstName?.toLowerCase().includes(q) ||
+      (h.isSuccess ? 'verified' : 'failed').includes(q)
+    );
   });
 
   const { data: openBoxes } = useQuery({
@@ -222,28 +236,49 @@ export const BarcodePage: React.FC = () => {
             ) : history?.length === 0 ? (
               <p className="text-xs text-slate-500 font-bold py-6 text-center">No scans recorded yet.</p>
             ) : (
-              history?.map((h: any) => (
-                <div
-                  key={h.id}
-                  className={`p-3 rounded-xl border text-xs ${
-                    h.isSuccess
-                      ? 'bg-slate-50 border-slate-200'
-                      : 'bg-rose-50 border-rose-200'
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="font-mono font-black text-slate-900 text-xs truncate max-w-[150px]">{h.barcodeCode}</span>
-                    <span className={`text-[10px] font-black px-2 py-0.5 rounded ${
-                      h.isSuccess ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' : 'bg-rose-100 text-rose-800 border border-rose-300'
-                    }`}>
-                      {h.isSuccess ? 'VERIFIED' : 'FAILED'}
-                    </span>
+              filteredHistory?.map((h: any) => {
+                // Action-specific badge label — LOOKUP is not the same as VERIFIED
+                const getBadge = () => {
+                  if (!h.isSuccess) return { label: 'FAILED', cls: 'bg-rose-100 text-rose-800 border-rose-300' };
+                  if (h.scanAction === 'LOOKUP') return { label: 'FOUND', cls: 'bg-slate-200 text-slate-700 border-slate-300' };
+                  if (h.scanAction === 'BOX_PACK') return { label: 'PACKED', cls: 'bg-blue-100 text-blue-800 border-blue-300' };
+                  if (h.scanAction === 'DISPATCH_VERIFY') return { label: '✅ BOX VERIFIED', cls: 'bg-emerald-100 text-emerald-800 border-emerald-300' };
+                  return { label: 'OK', cls: 'bg-slate-100 text-slate-700 border-slate-300' };
+                };
+                const badge = getBadge();
+                const actionLabel: Record<string, string> = {
+                  LOOKUP: 'Instant Lookup',
+                  BOX_PACK: 'Pack into Box',
+                  DISPATCH_VERIFY: 'Dispatch Verification',
+                };
+                return (
+                  <div
+                    key={h.id}
+                    className={`p-3 rounded-xl border text-xs ${
+                      h.scanAction === 'DISPATCH_VERIFY' && h.isSuccess
+                        ? 'bg-emerald-50 border-emerald-200'
+                        : h.isSuccess
+                        ? 'bg-slate-50 border-slate-200'
+                        : 'bg-rose-50 border-rose-200'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-mono font-black text-slate-900 text-xs truncate max-w-[140px]">{h.barcodeCode}</span>
+                      <span className={`text-[10px] font-black px-2 py-0.5 rounded border whitespace-nowrap ${badge.cls}`}>
+                        {badge.label}
+                      </span>
+                    </div>
+                    <p className="text-[11px] font-bold text-slate-500 mt-1.5">
+                      <span className={`font-black ${
+                        h.scanAction === 'DISPATCH_VERIFY' ? 'text-emerald-700' :
+                        h.scanAction === 'BOX_PACK' ? 'text-blue-700' : 'text-slate-600'
+                      }`}>{actionLabel[h.scanAction] || h.scanAction}</span>
+                      {' '}•{' '}{h.scannedBy?.firstName || 'User'}{' '}•{' '}
+                      {new Date(h.scannedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </p>
                   </div>
-                  <p className="text-[11px] font-bold text-slate-600 mt-1.5">
-                    {h.scanAction} &bull; {h.scannedBy?.firstName || 'User'} &bull; {new Date(h.scannedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                  </p>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         </div>
