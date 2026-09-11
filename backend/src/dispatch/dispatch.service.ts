@@ -19,6 +19,8 @@ export class DispatchService {
         customer: true,
         invoice: true,
         transporter: true,
+        deliveryChallan: true,
+        gatePass: true,
         boxes: { include: { box: true } },
         createdBy: { select: { firstName: true, lastName: true } },
       },
@@ -33,11 +35,13 @@ export class DispatchService {
         customer: true,
         invoice: { include: { items: { include: { part: true } } } },
         transporter: true,
+        deliveryChallan: true,
+        gatePass: true,
         boxes: {
           include: {
             box: {
               include: {
-                items: { include: { part: true } },
+                items: { include: { part: { include: { unit: true } } } },
               },
             },
           },
@@ -53,9 +57,19 @@ export class DispatchService {
     invoiceId: string;
     transporterId?: string;
     vehicleNumber?: string;
+    vehicleType?: string;
     driverName?: string;
     driverPhone?: string;
+    driverLicense?: string;
     lrNumber?: string;
+    movementType?: string;
+    reasonForTransport?: string;
+    referenceType?: string;
+    referenceNumber?: string;
+    ewayBillNumber?: string;
+    sealRequired?: boolean;
+    sealNumber?: string;
+    specialInstructions?: string;
     boxIds: string[];
   }) {
     const invoice = await this.prisma.invoice.findUnique({
@@ -90,9 +104,19 @@ export class DispatchService {
         customerId: invoice.customerId,
         transporterId: data.transporterId,
         vehicleNumber: data.vehicleNumber,
+        vehicleType: data.vehicleType || 'Covered Truck',
         driverName: data.driverName,
         driverPhone: data.driverPhone,
+        driverLicense: data.driverLicense,
         lrNumber: data.lrNumber,
+        movementType: data.movementType || 'Customer Delivery',
+        reasonForTransport: data.reasonForTransport || 'Supply',
+        referenceType: data.referenceType || 'Sales Order',
+        referenceNumber: data.referenceNumber || `SO-${dispatchNumber.replace('DSP-', '')}`,
+        ewayBillNumber: data.ewayBillNumber,
+        sealRequired: data.sealRequired || false,
+        sealNumber: data.sealNumber,
+        specialInstructions: data.specialInstructions,
         status: 'PREPARED',
         createdById: userId,
         boxes: {

@@ -513,27 +513,123 @@ model InvoiceItem {
 }
 
 model Dispatch {
-  id             String        @id @default(uuid())
-  dispatchNumber String        @unique
-  invoiceId      String
-  invoice        Invoice       @relation(fields: [invoiceId], references: [id])
-  customerId     String
-  customer       Customer      @relation(fields: [customerId], references: [id])
-  transporterId  String?
-  transporter    Transporter?  @relation(fields: [transporterId], references: [id])
-  vehicleNumber  String?
-  driverName     String?
-  driverPhone    String?
-  lrNumber       String?
-  dispatchDate   DateTime      @default(now())
-  gateOutTime    DateTime?
-  status         String        @default("PREPARED") // PREPARED, VERIFIED, DISPATCHED
-  createdById    String
-  createdBy      User          @relation("DispatchCreatedBy", fields: [createdById], references: [id])
-  createdAt      DateTime      @default(now())
-  updatedAt      DateTime      @updatedAt
+  id                 String        @id @default(uuid())
+  dispatchNumber     String        @unique
+  invoiceId          String
+  invoice            Invoice       @relation(fields: [invoiceId], references: [id])
+  customerId         String
+  customer           Customer      @relation(fields: [customerId], references: [id])
+  transporterId      String?
+  transporter        Transporter?  @relation(fields: [transporterId], references: [id])
+  vehicleNumber      String?
+  driverName         String?
+  driverPhone        String?
+  lrNumber           String?
+  dispatchDate       DateTime      @default(now())
+  gateOutTime        DateTime?
+  status             String        @default("PREPARED") // PREPARED, VERIFIED, DISPATCHED
+  movementType       String?       @default("Customer Delivery") // Customer Delivery, Stock Transfer, Job Work, Return, Sample, Own Use
+  reasonForTransport String?       @default("Supply") // Supply, Transfer, Job Work, Repair, Sample
+  referenceType      String?       @default("Sales Order")
+  referenceNumber    String?       // e.g. SO-2026-00125
+  referenceDate      DateTime?
+  ewayBillNumber     String?       // e.g. 181234567890
+  ewayBillDate       DateTime?
+  ewayBillValidUntil DateTime?
+  vehicleType        String?       // Truck, Container, Mini Truck, Trailer, Tempo
+  driverLicense      String?
+  helperName         String?
+  approxDistanceKm   Float?
+  destinationCity    String?
+  specialInstructions String?
+  remarks            String?
+  sealRequired       Boolean       @default(false)
+  sealNumber         String?
+  createdById        String
+  createdBy          User          @relation("DispatchCreatedBy", fields: [createdById], references: [id])
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
 
-  boxes          DispatchBox[]
+  boxes              DispatchBox[]
+  deliveryChallan    DeliveryChallan?
+  gatePass           GatePass?
+}
+
+model DeliveryChallan {
+  id                 String    @id @default(uuid())
+  challanNumber      String    @unique
+  dispatchId         String    @unique
+  dispatch           Dispatch  @relation(fields: [dispatchId], references: [id], onDelete: Cascade)
+  documentType       String    @default("DELIVERY CHALLAN") // DELIVERY CHALLAN or DISPATCH CHALLAN
+  challanDate        DateTime  @default(now())
+  movementType       String    @default("Customer Delivery")
+  reasonForTransport String    @default("Supply")
+  referenceType      String?   @default("Sales Order")
+  referenceNumber    String?
+  referenceDate      DateTime?
+  ewayBillNumber     String?
+  ewayBillDate       DateTime?
+  ewayBillValidUntil DateTime?
+  specialInstructions String?
+  remarks            String?
+  status             String    @default("CONFIRMED") // DRAFT, CONFIRMED, CANCELLED
+  version            Int       @default(1)
+  preparedByName     String?   @default("Dispatch Officer")
+  checkedByName      String?   @default("Warehouse Manager")
+  authorizedByName   String?   @default("Operations Head")
+  receivedByName     String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  gatePass           GatePass?
+}
+
+model GatePass {
+  id                   String           @id @default(uuid())
+  gatePassNumber       String           @unique
+  dispatchId           String           @unique
+  dispatch             Dispatch         @relation(fields: [dispatchId], references: [id], onDelete: Cascade)
+  challanId            String?          @unique
+  challan              DeliveryChallan? @relation(fields: [challanId], references: [id], onDelete: SetNull)
+  gatePassType         String           @default("GATE OUT") // GATE OUT, GATE IN, RETURN, TRANSFER, JOB WORK, SCRAP
+  gateNumber           String           @default("Gate #1 (Main Logistics Gate)")
+  gateLocation         String           @default("South Dispatch Bay")
+  status               String           @default("PENDING_VERIFICATION") // PENDING_VERIFICATION, VERIFIED, APPROVED, GATE_OUT, CANCELLED
+
+  // Security Verification Checklist Flags
+  vehicleVerified      Boolean          @default(false)
+  driverVerified       Boolean          @default(false)
+  materialVerified     Boolean          @default(false)
+  packagesVerified     Boolean          @default(false)
+  challanVerified      Boolean          @default(false)
+  ewayBillVerified     Boolean          @default(false)
+  sealVerified         Boolean          @default(false)
+  documentsVerified    Boolean          @default(false)
+  securityRemarks      String?
+
+  // Seal Details (Conditional)
+  sealRequired         Boolean          @default(false)
+  sealNumber           String?
+  sealType             String?          @default("Bolt Seal")
+  sealCondition        String?          @default("Intact / Good")
+  sealVerifiedBy       String?
+
+  // Gate Movement Timestamps
+  entryTime            DateTime?
+  loadingStartTime     DateTime?
+  loadingEndTime       DateTime?
+  exitTime             DateTime?
+
+  // Approvals & Signatures
+  warehouseOfficerName String?          @default("Warehouse Incharge")
+  warehouseOfficerId   String?          @default("EMP-WH-104")
+  securityOfficerName  String?          @default("Security Inspector")
+  securityOfficerId    String?          @default("EMP-SEC-042")
+  authorizedPersonName String?          @default("Plant Gate Controller")
+  driverSigned         Boolean          @default(false)
+
+  createdAt            DateTime         @default(now())
+  updatedAt            DateTime         @updatedAt
 }
 
 model DispatchBox {

@@ -46,3 +46,41 @@
 ::-webkit-scrollbar-thumb:hover {
   background: #64748b;
 }
+
+/* Print Styles for Barcode Shipping Labels */
+@media print {
+  aside,
+  header,
+  nav,
+  .no-print {
+    display: none !important;
+  }
+
+  body, html, #root {
+    background: #ffffff !important;
+    color: #000000 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  .print-only-container {
+    display: block !important;
+    margin: 0 auto !important;
+    padding: 12px !important;
+  }
+
+  .printable-carton-label {
+    display: block !important;
+    margin: 10px auto !important;
+    width: 100% !important;
+    max-width: 4.5in !important;
+    border: 3px solid #000000 !important;
+    border-radius: 8px !important;
+    padding: 16px !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    box-shadow: none !important;
+    page-break-inside: avoid !important;
+  }
+}
+
