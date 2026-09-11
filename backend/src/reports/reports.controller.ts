@@ -47,7 +47,6 @@ export class ReportsController {
   }
 
   @Get('dispatch/:id/pdf')
-  @RequirePermissions('reports.view')
   async exportDispatchPDF(
     @Param('id') id: string,
     @Res() res: Response,

@@ -79,7 +79,7 @@ export const PackingPage: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200 no-print">
         <div>
           <h1 className="text-2xl font-black text-slate-900 flex items-center gap-3">
             <div className="p-2.5 rounded-xl bg-blue-100 text-blue-700">
@@ -106,7 +106,7 @@ export const PackingPage: React.FC = () => {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left Column: Boxes list */}
-        <div className="lg:col-span-2 bg-white border border-slate-300 rounded-2xl overflow-hidden shadow-md">
+        <div className="lg:col-span-2 bg-white border border-slate-300 rounded-2xl overflow-hidden shadow-md no-print">
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
               <thead className="bg-slate-100 border-b border-slate-300 text-slate-700 font-black uppercase tracking-wider text-xs">
@@ -163,13 +163,15 @@ export const PackingPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Right Column: Selected Box Inspector */}
-        <div className="bg-white border border-slate-300 rounded-2xl p-6 space-y-5 shadow-md">
+        {/* Right Column: Selected Box Inspector / Printable Carton Label */}
+        <div className="bg-white border border-slate-300 rounded-2xl p-6 space-y-5 shadow-md printable-carton-label">
           {selectedBox ? (
             <>
+              {/* Header */}
               <div className="flex items-center justify-between border-b border-slate-200 pb-4">
                 <div>
-                  <h3 className="font-black text-lg text-slate-900">{selectedBox.boxNumber}</h3>
+                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-500 block">Shipping Carton</span>
+                  <h3 className="font-black text-xl text-slate-900">{selectedBox.boxNumber}</h3>
                   <p className="text-xs font-mono font-bold text-blue-700 mt-0.5">{selectedBox.barcode}</p>
                 </div>
                 <span className={`px-3 py-1 rounded-full text-xs font-black tracking-wide border ${
@@ -188,7 +190,7 @@ export const PackingPage: React.FC = () => {
                   className="max-h-20 object-contain"
                 />
                 <p className="text-[11px] font-mono font-black text-slate-900 uppercase tracking-widest">
-                  APEX MFG &bull; {selectedBox.boxNumber}
+                  APEX MANUFACTURING &bull; {selectedBox.boxNumber}
                 </p>
               </div>
 
@@ -210,7 +212,7 @@ export const PackingPage: React.FC = () => {
 
               {/* Add form */}
               {selectedBox.status === 'OPEN' && hasPermission('packing.manage') && (
-                <form onSubmit={handleAddItem} className="pt-3 border-t border-slate-200 space-y-2.5">
+                <form onSubmit={handleAddItem} className="pt-3 border-t border-slate-200 space-y-2.5 no-print">
                   <label className="text-xs font-black text-slate-800 uppercase tracking-wider block">Add Item into Box</label>
                   <div className="flex gap-2">
                     <select
@@ -234,7 +236,7 @@ export const PackingPage: React.FC = () => {
                     <button
                       type="submit"
                       disabled={addItemMutation.isPending}
-                      className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-black"
+                      className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-black cursor-pointer"
                     >
                       Add
                     </button>
@@ -243,10 +245,10 @@ export const PackingPage: React.FC = () => {
               )}
 
               {/* Action Buttons */}
-              <div className="pt-4 border-t border-slate-200 flex items-center justify-between">
+              <div className="pt-4 border-t border-slate-200 flex items-center justify-between no-print">
                 <button
                   onClick={() => window.print()}
-                  className="flex items-center gap-1.5 text-xs font-black text-slate-700 hover:text-slate-900"
+                  className="flex items-center gap-1.5 text-xs font-black text-slate-700 hover:text-slate-900 px-3 py-2 rounded-xl border border-slate-300 hover:bg-slate-100 cursor-pointer"
                 >
                   <Printer className="w-4 h-4" />
                   <span>Print Label</span>
@@ -256,7 +258,7 @@ export const PackingPage: React.FC = () => {
                   <button
                     onClick={() => sealBoxMutation.mutate(selectedBox.id)}
                     disabled={sealBoxMutation.isPending || !selectedBox.items?.length}
-                    className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs shadow-sm disabled:opacity-50"
+                    className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs shadow-sm disabled:opacity-50 cursor-pointer"
                   >
                     <Lock className="w-4 h-4" />
                     <span>Seal & Lock Box</span>
@@ -265,7 +267,7 @@ export const PackingPage: React.FC = () => {
                   <button
                     onClick={() => reopenBoxMutation.mutate(selectedBox.id)}
                     disabled={reopenBoxMutation.isPending}
-                    className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-black text-xs shadow-sm"
+                    className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-black text-xs shadow-sm cursor-pointer"
                   >
                     <Unlock className="w-4 h-4" />
                     <span>Supervisor Reopen</span>
@@ -274,7 +276,7 @@ export const PackingPage: React.FC = () => {
               </div>
             </>
           ) : (
-            <div className="text-center py-20 text-slate-500 text-sm font-semibold">
+            <div className="text-center py-20 text-slate-500 text-sm font-semibold no-print">
               Select any box on the left to inspect contents, generate barcode, or seal carton.
             </div>
           )}
@@ -282,4 +284,5 @@ export const PackingPage: React.FC = () => {
       </div>
     </div>
   );
+
 };

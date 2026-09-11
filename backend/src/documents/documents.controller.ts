@@ -35,6 +35,12 @@ export class DocumentsController {
     return this.documentsService.findOne(id);
   }
 
+  @Get(':id/references')
+  @RequirePermissions('documents.view')
+  getReferences(@Param('id') id: string) {
+    return this.documentsService.getReferences(id);
+  }
+
   @Post()
   @RequirePermissions('documents.upload')
   create(@Req() req: any, @Body() body: any) {
