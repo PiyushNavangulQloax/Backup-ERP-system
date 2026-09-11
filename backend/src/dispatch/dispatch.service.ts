@@ -153,6 +153,32 @@ export class DispatchService {
     });
   }
 
+  async unverifyBox(dispatchId: string, boxId: string) {
+    const dispatch = await this.findOne(dispatchId);
+    if (dispatch.status === 'DISPATCHED') {
+      throw new BadRequestException('Cannot unverify boxes after gate-out is authorized');
+    }
+
+    const dispatchBox = await this.prisma.dispatchBox.findFirst({
+      where: { dispatchId, boxId },
+      include: { box: true },
+    });
+
+    if (!dispatchBox) {
+      throw new BadRequestException('Box is not part of this dispatch manifest');
+    }
+
+    return this.prisma.dispatchBox.update({
+      where: { id: dispatchBox.id },
+      data: {
+        verifiedAt: null,
+        verifiedBy: null,
+      },
+      include: { box: true },
+    });
+  }
+
+
   async gateOut(id: string, userId: string) {
     const dispatch = await this.findOne(id);
     if (dispatch.status === 'DISPATCHED') {

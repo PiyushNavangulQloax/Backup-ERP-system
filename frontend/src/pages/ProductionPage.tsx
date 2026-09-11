@@ -2,16 +2,19 @@ import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../services/api';
 import { useAuth } from '../context/AuthContext';
+import { useSearch } from '../context/SearchContext';
 import {
   Cpu,
   Layers,
   Play,
   X,
+  Search,
 } from 'lucide-react';
 
 export const ProductionPage: React.FC = () => {
   const queryClient = useQueryClient();
   const { hasPermission } = useAuth();
+  const { searchQuery, setSearchQuery } = useSearch();
   const [activeTab, setActiveTab] = useState<'jobCards' | 'bom'>('jobCards');
 
   const { data: jobCards, isLoading: isJobsLoading } = useQuery({
@@ -28,6 +31,27 @@ export const ProductionPage: React.FC = () => {
   const { data: stores } = useQuery({
     queryKey: ['stores'],
     queryFn: async () => (await api.get('/masters/stores')).data,
+  });
+
+  // Filter data by search query
+  const filteredJobCards = jobCards?.filter((j: any) => {
+    if (!searchQuery.trim()) return true;
+    const q = searchQuery.toLowerCase().trim();
+    return (
+      j.jobCardNumber?.toLowerCase().includes(q) ||
+      j.part?.name?.toLowerCase().includes(q) ||
+      j.status?.toLowerCase().includes(q)
+    );
+  });
+
+  const filteredBoms = boms?.filter((b: any) => {
+    if (!searchQuery.trim()) return true;
+    const q = searchQuery.toLowerCase().trim();
+    return (
+      b.bomCode?.toLowerCase().includes(q) ||
+      b.part?.name?.toLowerCase().includes(q) ||
+      b.items?.some((item: any) => item.part?.name?.toLowerCase().includes(q))
+    );
   });
 
   const [completeJobId, setCompleteJobId] = useState<string | null>(null);
@@ -74,30 +98,53 @@ export const ProductionPage: React.FC = () => {
         </p>
       </div>
 
-      <div className="flex items-center gap-2">
-        <button
-          onClick={() => setActiveTab('jobCards')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black transition-all ${
-            activeTab === 'jobCards'
-              ? 'bg-blue-600 text-white shadow-sm'
-              : 'bg-white text-slate-700 hover:bg-slate-200 border border-slate-300'
-          }`}
-        >
-          <Play className="w-4 h-4 stroke-[2.5]" />
-          <span>Active Job Cards</span>
-        </button>
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setActiveTab('jobCards')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black transition-all ${
+              activeTab === 'jobCards'
+                ? 'bg-blue-600 text-white shadow-sm'
+                : 'bg-white text-slate-700 hover:bg-slate-200 border border-slate-300'
+            }`}
+          >
+            <Play className="w-4 h-4 stroke-[2.5]" />
+            <span>Active Job Cards</span>
+          </button>
 
-        <button
-          onClick={() => setActiveTab('bom')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black transition-all ${
-            activeTab === 'bom'
-              ? 'bg-blue-600 text-white shadow-sm'
-              : 'bg-white text-slate-700 hover:bg-slate-200 border border-slate-300'
-          }`}
-        >
-          <Layers className="w-4 h-4 stroke-[2.5]" />
-          <span>Bill of Materials (BOM)</span>
-        </button>
+          <button
+            onClick={() => setActiveTab('bom')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black transition-all ${
+              activeTab === 'bom'
+                ? 'bg-blue-600 text-white shadow-sm'
+                : 'bg-white text-slate-700 hover:bg-slate-200 border border-slate-300'
+            }`}
+          >
+            <Layers className="w-4 h-4 stroke-[2.5]" />
+            <span>Bill of Materials (BOM)</span>
+          </button>
+        </div>
+
+        {/* Search Input */}
+        <div className="relative w-full md:w-80">
+          <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search job card, part, BOM code..."
+            className="w-full bg-white border border-slate-300 rounded-xl pl-10 pr-9 py-2 text-xs font-semibold text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600 shadow-sm transition-all"
+          />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery('')}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 p-0.5 rounded-md hover:bg-slate-100 transition-colors"
+              title="Clear search"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
       </div>
 
       {activeTab === 'jobCards' ? (
@@ -119,7 +166,7 @@ export const ProductionPage: React.FC = () => {
                 {isJobsLoading ? (
                   <tr><td colSpan={7} className="text-center py-12 text-slate-600 font-bold">Loading job cards...</td></tr>
                 ) : (
-                  jobCards?.map((j: any) => (
+                  filteredJobCards?.map((j: any) => (
                     <tr key={j.id} className="hover:bg-slate-50 transition-colors">
                       <td className="py-4 px-5 font-mono font-black text-blue-700 text-base">{j.jobCardNumber}</td>
                       <td className="py-4 px-5 font-bold text-slate-900">{j.part?.name}</td>
@@ -158,7 +205,7 @@ export const ProductionPage: React.FC = () => {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-          {boms?.map((b: any) => (
+          {filteredBoms?.map((b: any) => (
             <div key={b.id} className="p-6 rounded-2xl bg-white border border-slate-300 shadow-sm space-y-4">
               <div className="flex items-center justify-between border-b border-slate-200 pb-3">
                 <div>

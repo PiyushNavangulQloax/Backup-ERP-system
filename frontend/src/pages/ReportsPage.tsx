@@ -1,14 +1,29 @@
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { FileSpreadsheet, Download, FileText, CheckCircle2, Loader2, RefreshCw } from 'lucide-react';
+import { FileSpreadsheet, Download, FileText, CheckCircle2, Loader2, RefreshCw, Search, X } from 'lucide-react';
 import { api, downloadFile } from '../services/api';
+import { useSearch } from '../context/SearchContext';
 
 export const ReportsPage: React.FC = () => {
   const [downloading, setDownloading] = useState<string | null>(null);
+  const { searchQuery, setSearchQuery } = useSearch();
 
   const { data: dispatches } = useQuery({
     queryKey: ['dispatches-report'],
     queryFn: async () => (await api.get('/dispatches')).data,
+  });
+
+  // Filter dispatches by search query
+  const filteredDispatches = dispatches?.filter((d: any) => {
+    if (!searchQuery.trim()) return true;
+    const q = searchQuery.toLowerCase().trim();
+    return (
+      d.dispatchNumber?.toLowerCase().includes(q) ||
+      d.customer?.name?.toLowerCase().includes(q) ||
+      d.invoice?.invoiceNumber?.toLowerCase().includes(q) ||
+      d.vehicleNumber?.toLowerCase().includes(q) ||
+      d.status?.toLowerCase().includes(q)
+    );
   });
 
   const handleDownload = async (endpoint: string, filename: string) => {
@@ -53,6 +68,27 @@ export const ReportsPage: React.FC = () => {
         <p className="text-sm font-semibold text-slate-600 mt-1">
           High-fidelity Excel spreadsheets & automated PDF gate-pass business exports
         </p>
+      </div>
+
+      {/* Search Input */}
+      <div className="relative w-full md:w-80">
+        <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+        <input
+          type="text"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder="Search dispatch #, customer, vehicle..."
+          className="w-full bg-white border border-slate-300 rounded-xl pl-10 pr-9 py-2 text-xs font-semibold text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600 shadow-sm transition-all"
+        />
+        {searchQuery && (
+          <button
+            onClick={() => setSearchQuery('')}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 p-0.5 rounded-md hover:bg-slate-100 transition-colors"
+            title="Clear search"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        )}
       </div>
 
       {/* Excel Reports Grid */}
