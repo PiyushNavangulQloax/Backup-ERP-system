@@ -2,6 +2,8 @@ import {
   Controller,
   Get,
   Post,
+  Put,
+  Delete,
   Body,
   Param,
   Query,
@@ -35,6 +37,25 @@ export class ProductionController {
   @RequirePermissions('production.manage')
   createBOM(@Body() body: any) {
     return this.productionService.createBOM(body);
+  }
+
+  // BOM Routing Steps
+  @Get('bom/:id/routing')
+  @RequirePermissions('production.view')
+  getRouting(@Param('id') bomId: string) {
+    return this.productionService.getRouting(bomId);
+  }
+
+  @Post('bom/:id/routing')
+  @RequirePermissions('production.manage')
+  addRoutingStep(@Param('id') bomId: string, @Body() body: any) {
+    return this.productionService.addRoutingStep(bomId, body);
+  }
+
+  @Delete('routing-steps/:id')
+  @RequirePermissions('production.manage')
+  deleteRoutingStep(@Param('id') id: string) {
+    return this.productionService.deleteRoutingStep(id);
   }
 
   // Operations
@@ -77,6 +98,18 @@ export class ProductionController {
   @RequirePermissions('production.manage')
   createJobCard(@Body() body: any) {
     return this.productionService.createJobCard(body);
+  }
+
+  @Get('job-cards/:id/operations')
+  @RequirePermissions('production.view')
+  getJobCardOperations(@Param('id') id: string) {
+    return this.productionService.getJobCardOperations(id);
+  }
+
+  @Put('job-card-operations/:id')
+  @RequirePermissions('production.manage')
+  updateJobCardOperation(@Param('id') id: string, @Body() body: any) {
+    return this.productionService.updateJobCardOperation(id, body);
   }
 
   @Post('material-issues')

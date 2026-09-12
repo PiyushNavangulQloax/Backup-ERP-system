@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { FileSpreadsheet, Download, FileText, CheckCircle2, Loader2, RefreshCw, Search, X } from 'lucide-react';
+import { FileSpreadsheet, Download, FileText, CheckCircle2, Loader2, RefreshCw, Search, X, QrCode } from 'lucide-react';
 import { api, downloadFile } from '../services/api';
 import { useSearch } from '../context/SearchContext';
 import { WorkflowStepper } from '../components/WorkflowStepper';
@@ -8,6 +8,14 @@ import { WorkflowStepper } from '../components/WorkflowStepper';
 export const ReportsPage: React.FC = () => {
   const [downloading, setDownloading] = useState<string | null>(null);
   const { searchQuery, setSearchQuery } = useSearch();
+
+  const [traceCode, setTraceCode] = useState('');
+  const [activeTraceCode, setActiveTraceCode] = useState('');
+  const { data: traceData, isLoading: isTraceLoading } = useQuery({
+    queryKey: ['traceability', activeTraceCode],
+    queryFn: async () => (await api.get(`/reports/traceability/${encodeURIComponent(activeTraceCode)}`)).data,
+    enabled: !!activeTraceCode,
+  });
 
   const { data: dispatches } = useQuery({
     queryKey: ['dispatches-report'],
@@ -147,6 +155,134 @@ export const ReportsPage: React.FC = () => {
             );
           })}
         </div>
+      </div>
+
+      {/* End-to-End Barcode Traceability Explorer */}
+      <div className="bg-white border border-slate-300 rounded-2xl shadow-sm p-6 space-y-5">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div>
+            <h2 className="text-lg font-black text-slate-900 flex items-center gap-2">
+              <QrCode className="w-5 h-5 text-blue-600" />
+              <span>End-to-End Barcode Traceability Explorer</span>
+            </h2>
+            <p className="text-xs font-semibold text-slate-500 mt-0.5">
+              Traverse complete supply-chain lineage for any Box carton barcode, Part code, or Dispatch manifest
+            </p>
+          </div>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (traceCode.trim()) setActiveTraceCode(traceCode.trim());
+            }}
+            className="flex items-center gap-2"
+          >
+            <input
+              type="text"
+              value={traceCode}
+              onChange={(e) => setTraceCode(e.target.value)}
+              placeholder="Enter Box #, Part Code, or Dispatch #..."
+              className="w-72 bg-slate-50 border border-slate-300 rounded-xl px-4 py-2 text-xs font-semibold text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
+            />
+            <button
+              type="submit"
+              className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-sm transition-all flex items-center gap-1.5"
+            >
+              <Search className="w-3.5 h-3.5" />
+              <span>Trace</span>
+            </button>
+          </form>
+        </div>
+
+        {isTraceLoading && (
+          <div className="py-8 text-center text-slate-500 text-xs font-semibold flex items-center justify-center gap-2">
+            <Loader2 className="w-4 h-4 animate-spin text-blue-600" />
+            <span>Tracing supply-chain genealogy...</span>
+          </div>
+        )}
+
+        {traceData && traceData.entityType !== 'UNKNOWN' && (
+          <div className="p-5 rounded-xl bg-slate-50 border border-slate-200 space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-200">
+              <div className="flex items-center gap-2">
+                <span className="px-2.5 py-1 rounded-md text-xs font-mono font-black bg-blue-600 text-white">
+                  {traceData.entityType}
+                </span>
+                <span className="font-mono font-bold text-slate-900 text-sm">
+                  {traceData.query}
+                </span>
+              </div>
+              <span className="text-xs font-bold text-emerald-700 flex items-center gap-1">
+                <CheckCircle2 className="w-4 h-4" />
+                <span>Lineage Verified</span>
+              </span>
+            </div>
+
+            {traceData.entityType === 'BOX' && (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+                <div className="p-3 bg-white rounded-lg border border-slate-200">
+                  <span className="font-bold text-slate-500 block">Box Details</span>
+                  <span className="font-black text-slate-900 text-sm">{traceData.data.boxNumber}</span>
+                  <p className="text-slate-600 mt-1">Status: <span className="font-bold">{traceData.data.status}</span></p>
+                  <p className="text-slate-600">Net: {traceData.data.netWeight || 'N/A'} kg | Gross: {traceData.data.grossWeight || 'N/A'} kg</p>
+                </div>
+                <div className="p-3 bg-white rounded-lg border border-slate-200">
+                  <span className="font-bold text-slate-500 block">Packed Items ({traceData.data.items?.length || 0})</span>
+                  {traceData.data.items?.map((it: any) => (
+                    <div key={it.id} className="mt-1 pb-1 border-b border-slate-100 last:border-0">
+                      <span className="font-bold text-slate-800">{it.part?.code}</span>: {it.quantity} {it.part?.unit?.symbol}
+                      {it.jobCard && <span className="text-slate-500 block">Job: {it.jobCard.jobCardNumber}</span>}
+                    </div>
+                  ))}
+                </div>
+                <div className="p-3 bg-white rounded-lg border border-slate-200">
+                  <span className="font-bold text-slate-500 block">Dispatch Manifest</span>
+                  {traceData.data.dispatchBoxes?.[0]?.dispatch ? (
+                    <div className="mt-1">
+                      <span className="font-black text-blue-700">{traceData.data.dispatchBoxes[0].dispatch.dispatchNumber}</span>
+                      <p className="text-slate-600">Customer: {traceData.data.dispatchBoxes[0].dispatch.customer?.name}</p>
+                      <p className="text-slate-600">Vehicle: {traceData.data.dispatchBoxes[0].dispatch.vehicleNumber || 'N/A'}</p>
+                    </div>
+                  ) : (
+                    <p className="text-slate-400 mt-1">Not yet dispatched</p>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {traceData.entityType === 'PART' && (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+                <div className="p-3 bg-white rounded-lg border border-slate-200">
+                  <span className="font-bold text-slate-500 block">Part Master</span>
+                  <span className="font-black text-slate-900 text-sm">{traceData.data.code}</span>
+                  <p className="text-slate-600 mt-1">{traceData.data.name}</p>
+                  <p className="text-slate-600">Type: {traceData.data.partType} | Unit: {traceData.data.unit?.symbol}</p>
+                </div>
+                <div className="p-3 bg-white rounded-lg border border-slate-200">
+                  <span className="font-bold text-slate-500 block">On-Hand Stock</span>
+                  {traceData.data.stocks?.map((st: any) => (
+                    <div key={st.id} className="mt-1">
+                      <span className="font-bold text-slate-800">{st.store?.name}</span>: {st.quantityOnHand}
+                    </div>
+                  ))}
+                </div>
+                <div className="p-3 bg-white rounded-lg border border-slate-200">
+                  <span className="font-bold text-slate-500 block">Recent GRN Receipts</span>
+                  {traceData.data.grnItems?.slice(0, 3).map((gi: any) => (
+                    <div key={gi.id} className="mt-1 pb-1 border-b border-slate-100 last:border-0">
+                      <span className="font-bold">{gi.grn?.grnNumber}</span> ({gi.acceptedQty} recvd)
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {traceData && traceData.entityType === 'UNKNOWN' && (
+          <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 text-xs font-semibold text-amber-800">
+            {traceData.message}
+          </div>
+        )}
       </div>
 
       {/* PDF Challans & Gate Passes */}

@@ -21,6 +21,7 @@ import { DeliveryChallanModal } from '../components/dispatch/DeliveryChallanModa
 import { GatePassModal } from '../components/dispatch/GatePassModal';
 import { DocumentChainModal } from '../components/dispatch/DocumentChainModal';
 import { WorkflowStepper } from '../components/WorkflowStepper';
+import { SearchableSelect } from '../components/SearchableSelect';
 
 export const DispatchPage: React.FC = () => {
   const queryClient = useQueryClient();
@@ -351,19 +352,19 @@ export const DispatchPage: React.FC = () => {
                 <label className="block text-xs font-black text-slate-800 uppercase tracking-wider mb-1.5">
                   Approved Tax Invoice *
                 </label>
-                <select
-                  required
+                <SearchableSelect
                   value={selectedInvoiceId}
-                  onChange={(e) => setSelectedInvoiceId(e.target.value)}
-                  className="w-full bg-white border border-slate-300 rounded-xl px-3.5 py-2.5 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-blue-600 focus:outline-none"
-                >
-                  <option value="">-- Select Approved Commercial Invoice --</option>
-                  {invoices?.map((inv: any) => (
-                    <option key={inv.id} value={inv.id} className="text-slate-900 font-bold">
-                      {inv.invoiceNumber} - {inv.customer?.name} (₹{inv.grandTotal.toLocaleString('en-IN')})
-                    </option>
-                  ))}
-                </select>
+                  onChange={setSelectedInvoiceId}
+                  options={
+                    invoices?.map((inv: any) => ({
+                      value: inv.id,
+                      label: `${inv.invoiceNumber} - ${inv.customer?.name}`,
+                      sublabel: `Date: ${new Date(inv.createdAt).toLocaleDateString()}`,
+                      badge: `₹${inv.grandTotal?.toLocaleString('en-IN') || '0'}`,
+                    })) || []
+                  }
+                  placeholder="-- Search & Select Approved Commercial Invoice --"
+                />
               </div>
 
               {/* Movement & Transport Reason */}
@@ -372,18 +373,19 @@ export const DispatchPage: React.FC = () => {
                   <label className="block text-slate-700 font-bold uppercase text-[10px] mb-1">
                     Movement Type
                   </label>
-                  <select
+                  <SearchableSelect
                     value={movementType}
-                    onChange={(e) => setMovementType(e.target.value)}
-                    className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 font-bold text-slate-900"
-                  >
-                    <option value="Customer Delivery">Customer Delivery</option>
-                    <option value="Stock Transfer">Inter-Warehouse Stock Transfer</option>
-                    <option value="Job Work">Job Work Supply</option>
-                    <option value="Return">Commercial Return</option>
-                    <option value="Sample">Product Sample</option>
-                    <option value="Repair">Repair / Maintenance</option>
-                  </select>
+                    onChange={setMovementType}
+                    options={[
+                      { value: 'Customer Delivery', label: 'Customer Delivery' },
+                      { value: 'Stock Transfer', label: 'Inter-Warehouse Stock Transfer' },
+                      { value: 'Job Work', label: 'Job Work Supply' },
+                      { value: 'Return', label: 'Commercial Return' },
+                      { value: 'Sample', label: 'Product Sample' },
+                      { value: 'Repair', label: 'Repair / Maintenance' },
+                    ]}
+                    placeholder="-- Select Movement Type --"
+                  />
                 </div>
                 <div>
                   <label className="block text-slate-700 font-bold uppercase text-[10px] mb-1">
@@ -405,18 +407,19 @@ export const DispatchPage: React.FC = () => {
                   <label className="block text-slate-700 font-bold uppercase text-[10px] mb-1">
                     Transporter Carrier
                   </label>
-                  <select
+                  <SearchableSelect
                     value={selectedTransporterId}
-                    onChange={(e) => setSelectedTransporterId(e.target.value)}
-                    className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 font-bold text-slate-900"
-                  >
-                    <option value="">-- Choose Transporter --</option>
-                    {transporters?.map((t: any) => (
-                      <option key={t.id} value={t.id} className="text-slate-900 font-bold">
-                        {t.name} ({t.code})
-                      </option>
-                    ))}
-                  </select>
+                    onChange={setSelectedTransporterId}
+                    options={
+                      transporters?.map((t: any) => ({
+                        value: t.id,
+                        label: `${t.name} (${t.code})`,
+                        sublabel: t.phone ? `Phone: ${t.phone}` : undefined,
+                        badge: t.gstin || undefined,
+                      })) || []
+                    }
+                    placeholder="-- Search & Select Transporter --"
+                  />
                 </div>
                 <div>
                   <label className="block text-slate-700 font-bold uppercase text-[10px] mb-1">

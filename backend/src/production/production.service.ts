@@ -129,7 +129,7 @@ export class ProductionService {
     const count = await this.prisma.jobCard.count();
     const jobCardNumber = `JOB-${new Date().getFullYear()}-${String(count + 1).padStart(4, '0')}`;
 
-    return this.prisma.jobCard.create({
+    const jobCard = await this.prisma.jobCard.create({
       data: {
         jobCardNumber,
         planId: data.planId,
@@ -139,6 +139,25 @@ export class ProductionService {
       },
       include: { part: true },
     });
+
+    const bom = await (this.prisma as any).bOM.findFirst({
+      where: { partId: data.partId, isActive: true },
+      include: { routingSteps: true },
+    });
+
+    if (bom && bom.routingSteps && bom.routingSteps.length > 0) {
+      await (this.prisma as any).jobCardOperation.createMany({
+        data: bom.routingSteps.map((step: any) => ({
+          jobCardId: jobCard.id,
+          operationId: step.operationId,
+          machineId: step.machineId,
+          stepNumber: step.stepNumber,
+          status: 'PENDING',
+        })),
+      });
+    }
+
+    return jobCard;
   }
 
   // Issue Materials to Job Card
@@ -360,6 +379,51 @@ export class ProductionService {
         returnedBy: { select: { id: true, firstName: true, lastName: true, email: true } },
       },
       orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  // Routing Steps
+  async getRouting(bomId: string) {
+    return (this.prisma as any).routingStep.findMany({
+      where: { bomId },
+      include: { operation: true, machine: true },
+      orderBy: { stepNumber: 'asc' },
+    });
+  }
+
+  async addRoutingStep(bomId: string, data: any) {
+    return (this.prisma as any).routingStep.create({
+      data: {
+        bomId,
+        operationId: data.operationId,
+        machineId: data.machineId || null,
+        stepNumber: data.stepNumber,
+        setupTimeMin: data.setupTimeMin || 0,
+        cycleTimeMin: data.cycleTimeMin || 0,
+        instructions: data.instructions,
+      },
+      include: { operation: true, machine: true },
+    });
+  }
+
+  async deleteRoutingStep(id: string) {
+    return (this.prisma as any).routingStep.delete({ where: { id } });
+  }
+
+  // Job Card Operations Progress
+  async getJobCardOperations(jobCardId: string) {
+    return (this.prisma as any).jobCardOperation.findMany({
+      where: { jobCardId },
+      include: { operation: true, machine: true, operator: true },
+      orderBy: { stepNumber: 'asc' },
+    });
+  }
+
+  async updateJobCardOperation(id: string, data: any) {
+    return (this.prisma as any).jobCardOperation.update({
+      where: { id },
+      data,
+      include: { operation: true, machine: true, operator: true },
     });
   }
 }

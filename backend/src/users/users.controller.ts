@@ -46,6 +46,15 @@ export class UsersController {
     return this.usersService.getPermissions();
   }
 
+  @Put('roles/:id/permissions')
+  @RequirePermissions('roles.manage')
+  updateRolePermissions(
+    @Param('id') id: string,
+    @Body() body: { permissionIds: string[] },
+  ) {
+    return this.usersService.updateRolePermissions(id, body.permissionIds);
+  }
+
   @Get(':id')
   @RequirePermissions('users.view')
   findOne(@Param('id') id: string) {

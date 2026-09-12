@@ -23,10 +23,13 @@ export const LoginPage: React.FC = () => {
 
   const sampleUsers = [
     { role: 'Administrator', email: 'admin@erp.local' },
+    { role: 'Management', email: 'mgmt@erp.local' },
     { role: 'Purchase', email: 'purchase@erp.local' },
     { role: 'Stores', email: 'stores@erp.local' },
     { role: 'Production', email: 'production@erp.local' },
+    { role: 'Quality', email: 'quality@erp.local' },
     { role: 'Packing', email: 'packing@erp.local' },
+    { role: 'Billing', email: 'billing@erp.local' },
     { role: 'Dispatch', email: 'dispatch@erp.local' },
   ];
 
@@ -108,8 +111,12 @@ export const LoginPage: React.FC = () => {
                 <button
                   key={u.email}
                   type="button"
-                  onClick={() => setEmail(u.email)}
-                  className="text-left p-2.5 rounded-xl bg-slate-50 hover:bg-blue-50 hover:border-blue-300 transition-all border border-slate-300"
+                  onClick={() => {
+                    setEmail(u.email);
+                    setPassword('Admin@12345');
+                    setError('');
+                  }}
+                  className="text-left p-2.5 rounded-xl bg-slate-50 hover:bg-blue-50 hover:border-blue-300 transition-all border border-slate-300 active:scale-[0.98]"
                 >
                   <span className="font-black text-xs text-slate-900 block">{u.role}</span>
                   <span className="text-[10px] text-slate-500 font-mono truncate block mt-0.5">{u.email}</span>

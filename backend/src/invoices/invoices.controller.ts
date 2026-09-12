@@ -7,7 +7,9 @@ import {
   Query,
   UseGuards,
   Req,
+  Res,
 } from '@nestjs/common';
+import { Response } from 'express';
 import { InvoicesService } from './invoices.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
@@ -43,5 +45,17 @@ export class InvoicesController {
   @RequirePermissions('billing.approve')
   approve(@Param('id') id: string) {
     return this.invoicesService.approve(id);
+  }
+
+  @Get(':id/pdf')
+  @RequirePermissions('billing.view')
+  async downloadInvoicePDF(@Param('id') id: string, @Res() res: Response) {
+    const buffer = await this.invoicesService.generateInvoicePDF(id);
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `inline; filename="Invoice_${id}.pdf"`,
+      'Content-Length': buffer.length,
+    });
+    res.end(buffer);
   }
 }

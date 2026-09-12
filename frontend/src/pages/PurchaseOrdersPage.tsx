@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api } from '../services/api';
+import { api, downloadFile } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { useSearch } from '../context/SearchContext';
 import { WorkflowStepper } from '../components/WorkflowStepper';
+import { SearchableSelect } from '../components/SearchableSelect';
 import {
   ShoppingCart,
   Plus,
@@ -13,6 +14,10 @@ import {
   Building,
   X,
   Search,
+  FileText,
+  AlertTriangle,
+  Trash2,
+  PackageCheck,
 } from 'lucide-react';
 
 export const PurchaseOrdersPage: React.FC = () => {
@@ -68,6 +73,33 @@ export const PurchaseOrdersPage: React.FC = () => {
     { partId: '', orderedQty: 100, unitPrice: 10, taxRate: 18 },
   ]);
 
+  // Available stock helper
+  const getPartInfo = (partId: string) => {
+    const part = parts?.find((p: any) => p.id === partId);
+    if (!part) return { part: null, stock: 0, uom: 'units' };
+    const storeStock =
+      part.stocks?.reduce(
+        (acc: number, s: any) => acc + (Number(s.quantityOnHand ?? s.quantity ?? 0)),
+        0
+      ) || 0;
+    const stock =
+      storeStock > 0
+        ? storeStock
+        : Number(part.availableStock ?? part.minStockLevel ?? 0);
+    const uom =
+      part.unit?.symbol ||
+      part.unit?.name ||
+      part.uom ||
+      'units';
+    return { part, stock, uom };
+  };
+
+  const hasInsufficientStockItem = items.some((it) => {
+    if (!it.partId) return false;
+    const { stock } = getPartInfo(it.partId);
+    return it.orderedQty > stock;
+  });
+
   const createPOMutation = useMutation({
     mutationFn: async (payload: any) => {
       return (await api.post('/purchase-orders', payload)).data;
@@ -76,6 +108,9 @@ export const PurchaseOrdersPage: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: ['purchase-orders'] });
       setIsCreateOpen(false);
       setItems([{ partId: '', orderedQty: 100, unitPrice: 10, taxRate: 18 }]);
+      setSelectedSupplier('');
+      setDeliveryDate('');
+      setNotes('');
     },
   });
 
@@ -90,6 +125,11 @@ export const PurchaseOrdersPage: React.FC = () => {
 
   const handleAddItem = () => {
     setItems([...items, { partId: '', orderedQty: 50, unitPrice: 10, taxRate: 18 }]);
+  };
+
+  const handleRemoveItem = (idx: number) => {
+    if (items.length <= 1) return;
+    setItems(items.filter((_, i) => i !== idx));
   };
 
   const handleCreateSubmit = (e: React.FormEvent) => {
@@ -244,14 +284,24 @@ export const PurchaseOrdersPage: React.FC = () => {
                       </span>
                     </td>
                     <td className="py-4 px-5 text-right">
-                      {po.status === 'SUBMITTED' && hasPermission('po.approve') && (
+                      <div className="flex items-center justify-end gap-2">
                         <button
-                          onClick={() => approveMutation.mutate(po.id)}
-                          className="px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs shadow-sm transition-all"
+                          onClick={() => downloadFile(`/purchase-orders/${po.id}/pdf`, `Purchase_Order_${po.poNumber}.pdf`)}
+                          className="px-2.5 py-1.5 rounded-lg border border-slate-300 hover:bg-slate-100 text-slate-700 font-semibold text-xs transition-all flex items-center gap-1.5 shadow-sm"
+                          title="Download PO PDF"
                         >
-                          Approve PO
+                          <FileText className="w-3.5 h-3.5 text-blue-600" />
+                          <span>PDF</span>
                         </button>
-                      )}
+                        {po.status === 'SUBMITTED' && hasPermission('po.approve') && (
+                          <button
+                            onClick={() => approveMutation.mutate(po.id)}
+                            className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs shadow-sm transition-all"
+                          >
+                            Approve
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -284,17 +334,19 @@ export const PurchaseOrdersPage: React.FC = () => {
                   <label className="block text-xs font-black text-slate-800 uppercase tracking-wider mb-2">
                     Supplier / Vendor *
                   </label>
-                  <select
-                    required
+                  <SearchableSelect
                     value={selectedSupplier}
-                    onChange={(e) => setSelectedSupplier(e.target.value)}
-                    className="w-full bg-white border border-slate-300 rounded-xl px-3.5 py-2.5 text-sm font-bold text-slate-900 focus:ring-2 focus:ring-blue-600 focus:outline-none"
-                  >
-                    <option value="">-- Select Supplier --</option>
-                    {suppliers?.map((s: any) => (
-                      <option key={s.id} value={s.id} className="text-slate-900 font-bold">{s.name} ({s.code})</option>
-                    ))}
-                  </select>
+                    onChange={setSelectedSupplier}
+                    options={
+                      suppliers?.map((s: any) => ({
+                        value: s.id,
+                        label: `${s.name} (${s.code})`,
+                        sublabel: s.contactPerson ? `Contact: ${s.contactPerson} | Phone: ${s.phone || 'N/A'}` : undefined,
+                        badge: s.gstin || s.city || undefined,
+                      })) || []
+                    }
+                    placeholder="-- Search & Select Supplier --"
+                  />
                 </div>
                 <div>
                   <label className="block text-xs font-black text-slate-800 uppercase tracking-wider mb-2">
@@ -304,7 +356,7 @@ export const PurchaseOrdersPage: React.FC = () => {
                     type="date"
                     value={deliveryDate}
                     onChange={(e) => setDeliveryDate(e.target.value)}
-                    className="w-full bg-white border border-slate-300 rounded-xl px-3.5 py-2.5 text-sm font-bold text-slate-900 focus:ring-2 focus:ring-blue-600 focus:outline-none"
+                    className="w-full bg-white border border-slate-300 rounded-xl px-3.5 py-2.5 text-sm font-bold text-slate-900 focus:ring-2 focus:ring-blue-600 focus:outline-none shadow-sm"
                   />
                 </div>
               </div>
@@ -312,79 +364,177 @@ export const PurchaseOrdersPage: React.FC = () => {
               {/* Order Items */}
               <div className="pt-2">
                 <div className="flex items-center justify-between mb-2.5">
-                  <label className="text-xs font-black text-slate-800 uppercase tracking-wider">
-                    Order Items Breakdown
-                  </label>
+                  <div>
+                    <label className="text-xs font-black text-slate-800 uppercase tracking-wider block">
+                      Order Items Breakdown
+                    </label>
+                    <span className="text-[11px] font-semibold text-slate-500">
+                      Real-time inventory stock checking is enabled for all users
+                    </span>
+                  </div>
                   <button
                     type="button"
                     onClick={handleAddItem}
-                    className="text-xs font-black text-blue-600 hover:text-blue-700 flex items-center gap-1.5"
+                    className="text-xs font-black text-blue-600 hover:text-blue-700 flex items-center gap-1.5 px-3 py-1.5 rounded-lg hover:bg-blue-50 transition-colors"
                   >
                     <Plus className="w-4 h-4 stroke-[2.5]" /> Add Item Row
                   </button>
                 </div>
 
                 <div className="space-y-3">
-                  {items.map((it, idx) => (
-                    <div key={idx} className="grid grid-cols-12 gap-3 p-3.5 rounded-xl bg-slate-50 border border-slate-300 items-center">
-                      <div className="col-span-5">
-                        <label className="block text-[10px] font-black text-slate-600 uppercase mb-1">Part / Item</label>
-                        <select
-                          required
-                          value={it.partId}
-                          onChange={(e) => {
-                            const updated = [...items];
-                            updated[idx].partId = e.target.value;
-                            const found = parts?.find((p: any) => p.id === e.target.value);
-                            if (found) updated[idx].unitPrice = found.standardCost || 10;
-                            setItems(updated);
-                          }}
-                          className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs font-bold text-slate-900"
-                        >
-                          <option value="">Select Part...</option>
-                          {parts?.map((p: any) => (
-                            <option key={p.id} value={p.id} className="text-slate-900 font-bold">{p.name} ({p.code})</option>
-                          ))}
-                        </select>
+                  {items.map((it, idx) => {
+                    const { part, stock, uom } = getPartInfo(it.partId);
+                    const isExceeding = Boolean(it.partId && it.orderedQty > stock);
+
+                    return (
+                      <div
+                        key={idx}
+                        className={`p-3.5 rounded-2xl border transition-all ${
+                          isExceeding
+                            ? 'bg-amber-50/80 border-amber-300 ring-1 ring-amber-300 shadow-sm'
+                            : 'bg-slate-50 border-slate-300'
+                        }`}
+                      >
+                        <div className="grid grid-cols-12 gap-3 items-end">
+                          <div className="col-span-12 sm:col-span-5">
+                            <div className="flex items-center justify-between mb-1">
+                              <label className="block text-[10px] font-black text-slate-700 uppercase tracking-wider">
+                                Part / Item *
+                              </label>
+                              {it.partId && (
+                                <span
+                                  className={`inline-flex items-center gap-1 text-[10px] font-extrabold px-2 py-0.5 rounded-full border ${
+                                    stock > 0
+                                      ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                                      : 'bg-rose-100 text-rose-800 border-rose-300'
+                                  }`}
+                                >
+                                  Available Stock: {stock} {uom}
+                                </span>
+                              )}
+                            </div>
+                            <SearchableSelect
+                              value={it.partId}
+                              onChange={(val) => {
+                                const updated = [...items];
+                                updated[idx].partId = val;
+                                const found = parts?.find((p: any) => p.id === val);
+                                if (found) updated[idx].unitPrice = found.standardCost || 10;
+                                setItems(updated);
+                              }}
+                              options={
+                                parts?.map((p: any) => {
+                                  const storeStock =
+                                    p.stocks?.reduce(
+                                      (acc: number, s: any) => acc + (Number(s.quantityOnHand ?? s.quantity ?? 0)),
+                                      0
+                                    ) || 0;
+                                  const pStock =
+                                    storeStock > 0
+                                      ? storeStock
+                                      : Number(p.availableStock ?? p.minStockLevel ?? 0);
+                                  const uom = p.unit?.symbol || p.unit?.name || p.uom || 'units';
+                                  return {
+                                    value: p.id,
+                                    label: `${p.name} (${p.code})`,
+                                    sublabel: `Available Stock: ${pStock} ${uom}`,
+                                    badge: `${pStock} ${uom} in stock`,
+                                  };
+                                }) || []
+                              }
+                              placeholder="-- Search & Select Part --"
+                            />
+                          </div>
+
+                          <div className="col-span-6 sm:col-span-2">
+                            <label className="block text-[10px] font-black text-slate-700 uppercase tracking-wider mb-1">
+                              Ordered Qty
+                            </label>
+                            <input
+                              type="number"
+                              min="1"
+                              required
+                              value={it.orderedQty}
+                              onChange={(e) => {
+                                const updated = [...items];
+                                updated[idx].orderedQty = parseFloat(e.target.value) || 0;
+                                setItems(updated);
+                              }}
+                              className={`w-full bg-white border rounded-xl px-3 py-2 text-xs font-mono font-black text-slate-900 focus:outline-none focus:ring-2 shadow-sm ${
+                                isExceeding
+                                  ? 'border-amber-400 focus:ring-amber-500 bg-amber-50/50'
+                                  : 'border-slate-300 focus:ring-blue-600'
+                              }`}
+                            />
+                          </div>
+
+                          <div className="col-span-6 sm:col-span-2">
+                            <label className="block text-[10px] font-black text-slate-700 uppercase tracking-wider mb-1">
+                              Rate ($)
+                            </label>
+                            <input
+                              type="number"
+                              step="0.01"
+                              required
+                              value={it.unitPrice}
+                              onChange={(e) => {
+                                const updated = [...items];
+                                updated[idx].unitPrice = parseFloat(e.target.value) || 0;
+                                setItems(updated);
+                              }}
+                              className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-mono font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600 shadow-sm"
+                            />
+                          </div>
+
+                          <div className="col-span-9 sm:col-span-2">
+                            <label className="block text-[10px] font-black text-slate-700 uppercase tracking-wider mb-1">
+                              Total
+                            </label>
+                            <span className="font-mono font-black text-blue-700 text-sm block py-1.5 px-2 bg-white rounded-xl text-right border border-slate-200 shadow-sm">
+                              ${(it.orderedQty * it.unitPrice).toFixed(2)}
+                            </span>
+                          </div>
+
+                          <div className="col-span-3 sm:col-span-1 flex justify-end pb-1">
+                            {items.length > 1 && (
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveItem(idx)}
+                                className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                title="Remove line item"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Real-time Insufficient Stock Warning Alert Signal */}
+                        {isExceeding && (
+                          <div className="mt-3 p-3 rounded-xl bg-amber-100/90 border border-amber-300 flex items-start gap-2.5 text-amber-950 shadow-sm animate-pulse">
+                            <AlertTriangle className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
+                            <div className="text-xs leading-relaxed">
+                              <span className="font-black text-amber-900">
+                                ⚠️ Insufficient Stock Alert:{' '}
+                              </span>
+                              Required quantity (
+                              <span className="font-mono font-black text-amber-950">
+                                {it.orderedQty}
+                              </span>
+                              ) exceeds available stock (
+                              <span className="font-mono font-black text-amber-950">
+                                {stock} {uom}
+                              </span>
+                              ).
+                              <span className="block mt-0.5 font-bold text-amber-800">
+                                Notice: The order will be fulfilled based on the available stock quantity.
+                              </span>
+                            </div>
+                          </div>
+                        )}
                       </div>
-                      <div className="col-span-2">
-                        <label className="block text-[10px] font-black text-slate-600 uppercase mb-1">Qty</label>
-                        <input
-                          type="number"
-                          min="1"
-                          required
-                          value={it.orderedQty}
-                          onChange={(e) => {
-                            const updated = [...items];
-                            updated[idx].orderedQty = parseFloat(e.target.value) || 0;
-                            setItems(updated);
-                          }}
-                          className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs font-mono font-bold text-slate-900"
-                        />
-                      </div>
-                      <div className="col-span-3">
-                        <label className="block text-[10px] font-black text-slate-600 uppercase mb-1">Rate ($)</label>
-                        <input
-                          type="number"
-                          step="0.01"
-                          required
-                          value={it.unitPrice}
-                          onChange={(e) => {
-                            const updated = [...items];
-                            updated[idx].unitPrice = parseFloat(e.target.value) || 0;
-                            setItems(updated);
-                          }}
-                          className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs font-mono font-bold text-slate-900"
-                        />
-                      </div>
-                      <div className="col-span-2 text-right">
-                        <label className="block text-[10px] font-black text-slate-600 uppercase mb-1">Total</label>
-                        <span className="font-mono font-black text-blue-700 text-sm block pt-1">
-                          ${(it.orderedQty * it.unitPrice).toFixed(2)}
-                        </span>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
 
@@ -396,10 +546,21 @@ export const PurchaseOrdersPage: React.FC = () => {
                   rows={2}
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
-                  className="w-full bg-white border border-slate-300 rounded-xl px-3.5 py-2.5 text-sm font-medium text-slate-900 focus:ring-2 focus:ring-blue-600 focus:outline-none"
+                  className="w-full bg-white border border-slate-300 rounded-xl px-3.5 py-2.5 text-sm font-medium text-slate-900 focus:ring-2 focus:ring-blue-600 focus:outline-none shadow-sm"
                   placeholder="Payment terms, delivery instructions, packaging specs..."
                 />
               </div>
+
+              {/* Overarching Notice if any item exceeds stock */}
+              {hasInsufficientStockItem && (
+                <div className="p-3.5 rounded-xl bg-amber-50 border-2 border-amber-300 flex items-center gap-3 text-amber-950 shadow-sm">
+                  <AlertTriangle className="w-5 h-5 text-amber-700 shrink-0" />
+                  <div className="text-xs">
+                    <span className="font-black text-amber-900">Notice for all users: </span>
+                    One or more items exceed current available stock. This purchase order will be fulfilled based on the available stock quantity.
+                  </div>
+                </div>
+              )}
 
               <div className="pt-4 border-t border-slate-200 flex justify-end gap-3">
                 <button

@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Put,
+  Delete,
   Body,
   Param,
   UseGuards,
@@ -33,6 +34,11 @@ export class MastersController {
   updateCustomer(@Param('id') id: string, @Body() body: any) {
     return this.mastersService.updateCustomer(id, body);
   }
+  @Delete('customers/:id')
+  @RequirePermissions('masters.delete')
+  deleteCustomer(@Param('id') id: string) {
+    return this.mastersService.deleteCustomer(id);
+  }
 
   // Suppliers
   @Get('suppliers')
@@ -49,6 +55,11 @@ export class MastersController {
   @RequirePermissions('masters.edit')
   updateSupplier(@Param('id') id: string, @Body() body: any) {
     return this.mastersService.updateSupplier(id, body);
+  }
+  @Delete('suppliers/:id')
+  @RequirePermissions('masters.delete')
+  deleteSupplier(@Param('id') id: string) {
+    return this.mastersService.deleteSupplier(id);
   }
 
   // Parts
@@ -67,6 +78,11 @@ export class MastersController {
   updatePart(@Param('id') id: string, @Body() body: any) {
     return this.mastersService.updatePart(id, body);
   }
+  @Delete('parts/:id')
+  @RequirePermissions('masters.delete')
+  deletePart(@Param('id') id: string) {
+    return this.mastersService.deletePart(id);
+  }
 
   // Stores & Locations
   @Get('stores')
@@ -78,6 +94,16 @@ export class MastersController {
   @RequirePermissions('masters.create')
   createStore(@Body() body: any) {
     return this.mastersService.createStore(body);
+  }
+  @Put('stores/:id')
+  @RequirePermissions('masters.edit')
+  updateStore(@Param('id') id: string, @Body() body: any) {
+    return this.mastersService.updateStore(id, body);
+  }
+  @Delete('stores/:id')
+  @RequirePermissions('masters.delete')
+  deleteStore(@Param('id') id: string) {
+    return this.mastersService.deleteStore(id);
   }
   @Post('stores/:id/locations')
   @RequirePermissions('masters.create')
@@ -95,6 +121,16 @@ export class MastersController {
   @RequirePermissions('masters.create')
   createUnit(@Body() body: any) {
     return this.mastersService.createUnit(body);
+  }
+  @Put('units/:id')
+  @RequirePermissions('masters.edit')
+  updateUnit(@Param('id') id: string, @Body() body: any) {
+    return this.mastersService.updateUnit(id, body);
+  }
+  @Delete('units/:id')
+  @RequirePermissions('masters.delete')
+  deleteUnit(@Param('id') id: string) {
+    return this.mastersService.deleteUnit(id);
   }
 
   // Taxes
@@ -119,5 +155,56 @@ export class MastersController {
   @RequirePermissions('masters.create')
   createTransporter(@Body() body: any) {
     return this.mastersService.createTransporter(body);
+  }
+
+  // Machines
+  @Get('machines')
+  @RequirePermissions('masters.view')
+  getMachines() {
+    return this.mastersService.getMachines();
+  }
+  @Post('machines')
+  @RequirePermissions('masters.create')
+  createMachine(@Body() body: any) {
+    return this.mastersService.createMachine(body);
+  }
+  @Put('machines/:id')
+  @RequirePermissions('masters.edit')
+  updateMachine(@Param('id') id: string, @Body() body: any) {
+    return this.mastersService.updateMachine(id, body);
+  }
+
+  // Employees
+  @Get('employees')
+  @RequirePermissions('masters.view')
+  getEmployees() {
+    return this.mastersService.getEmployees();
+  }
+  @Post('employees')
+  @RequirePermissions('masters.create')
+  createEmployee(@Body() body: any) {
+    return this.mastersService.createEmployee(body);
+  }
+  @Put('employees/:id')
+  @RequirePermissions('masters.edit')
+  updateEmployee(@Param('id') id: string, @Body() body: any) {
+    return this.mastersService.updateEmployee(id, body);
+  }
+
+  // Customer Parts Mapping
+  @Get('customer-parts')
+  @RequirePermissions('masters.view')
+  getCustomerParts() {
+    return this.mastersService.getCustomerParts();
+  }
+  @Post('customer-parts')
+  @RequirePermissions('masters.create')
+  createCustomerPart(@Body() body: any) {
+    return this.mastersService.createCustomerPart(body);
+  }
+  @Put('customer-parts/:id')
+  @RequirePermissions('masters.edit')
+  updateCustomerPart(@Param('id') id: string, @Body() body: any) {
+    return this.mastersService.updateCustomerPart(id, body);
   }
 }

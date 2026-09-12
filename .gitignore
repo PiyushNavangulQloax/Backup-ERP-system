@@ -18,6 +18,8 @@ pnpm-debug.log*
 # Database & Storage
 *.sqlite
 *.sqlite-journal
+*.db
+*.db-journal
 storage/uploads/*
 !storage/uploads/.gitkeep
 

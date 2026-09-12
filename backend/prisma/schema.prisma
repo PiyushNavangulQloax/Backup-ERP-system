@@ -5,7 +5,7 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -87,6 +87,7 @@ model Customer {
   updatedAt      DateTime   @updatedAt
   invoices       Invoice[]
   dispatches     Dispatch[]
+  customerParts  CustomerPart[]
 }
 
 model Supplier {
@@ -172,6 +173,7 @@ model Part {
   materialReturns MaterialReturn[]
   boxItems       BoxItem[]
   invoiceItems   InvoiceItem[]
+  customerParts  CustomerPart[]
 }
 
 model Tax {
@@ -193,6 +195,53 @@ model Transporter {
   isActive       Boolean    @default(true)
   createdAt      DateTime   @default(now())
   dispatches     Dispatch[]
+}
+
+model CustomerPart {
+  id               String   @id @default(uuid())
+  customerId       String
+  customer         Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  partId           String
+  part             Part     @relation(fields: [partId], references: [id], onDelete: Cascade)
+  customerPartCode String
+  customerPartName String?
+  drawingNumber    String?
+  revision         String?  @default("Rev A")
+  notes            String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@unique([customerId, customerPartCode])
+}
+
+model Machine {
+  id          String   @id @default(uuid())
+  code        String   @unique
+  name        String
+  workCenter  String   @default("GENERAL") // CNC, MILLING, LATHE, ASSEMBLY, PACKING
+  hourlyRate  Float    @default(0)
+  status      String   @default("ACTIVE") // ACTIVE, MAINTENANCE, OFFLINE
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  routingSteps      RoutingStep[]
+  jobCardOperations JobCardOperation[]
+}
+
+model Employee {
+  id          String   @id @default(uuid())
+  code        String   @unique
+  fullName    String
+  department  String   @default("PRODUCTION") // PRODUCTION, QUALITY, STORES, PACKING, DISPATCH
+  designation String?
+  shift       String   @default("GENERAL") // SHIFT_A, SHIFT_B, SHIFT_C, GENERAL
+  phone       String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  jobCardOperations JobCardOperation[]
 }
 
 // -----------------------------------------------------------------------------
@@ -331,6 +380,7 @@ model BOM {
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
   items     BOMItem[]
+  routingSteps RoutingStep[]
 }
 
 model BOMItem {
@@ -350,6 +400,25 @@ model Operation {
   description         String?
   standardTimeMinutes Float    @default(0)
   createdAt           DateTime @default(now())
+
+  routingSteps        RoutingStep[]
+  jobCardOperations   JobCardOperation[]
+}
+
+model RoutingStep {
+  id            String    @id @default(uuid())
+  bomId         String
+  bom           BOM       @relation(fields: [bomId], references: [id], onDelete: Cascade)
+  operationId   String
+  operation     Operation @relation(fields: [operationId], references: [id])
+  machineId     String?
+  machine       Machine?  @relation(fields: [machineId], references: [id])
+  stepNumber    Int       @default(1)
+  setupTimeMin  Float     @default(0)
+  cycleTimeMin  Float     @default(0)
+  instructions  String?
+
+  @@unique([bomId, stepNumber])
 }
 
 model ProductionPlan {
@@ -386,6 +455,28 @@ model JobCard {
   materialIssues  MaterialIssue[]
   materialReturns MaterialReturn[]
   boxItems        BoxItem[]
+  operations      JobCardOperation[]
+}
+
+model JobCardOperation {
+  id             String    @id @default(uuid())
+  jobCardId      String
+  jobCard        JobCard   @relation(fields: [jobCardId], references: [id], onDelete: Cascade)
+  operationId    String
+  operation      Operation @relation(fields: [operationId], references: [id])
+  machineId      String?
+  machine        Machine?  @relation(fields: [machineId], references: [id])
+  operatorId     String?
+  operator       Employee? @relation(fields: [operatorId], references: [id])
+  stepNumber     Int       @default(1)
+  status         String    @default("PENDING") // PENDING, IN_PROGRESS, COMPLETED, PAUSED
+  completedQty   Float     @default(0)
+  rejectedQty    Float     @default(0)
+  startedAt      DateTime?
+  completedAt    DateTime?
+  notes          String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 }
 
 model MaterialIssue {
