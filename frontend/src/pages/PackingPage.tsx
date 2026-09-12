@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { useSearch } from '../context/SearchContext';
+import { WorkflowStepper } from '../components/WorkflowStepper';
 import {
   Package,
   Plus,
@@ -109,6 +110,10 @@ export const PackingPage: React.FC = () => {
 
   return (
     <div className="space-y-6">
+      <div className="no-print">
+        <WorkflowStepper activeStageKey="packing" />
+      </div>
+
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200 no-print">
         <div>
           <h1 className="text-2xl font-black text-slate-900 flex items-center gap-3">

@@ -236,6 +236,7 @@ export class GatePassService {
       packages: number;
       boxNumber: string;
       boxBarcode: string;
+      boxId?: string;
       verified: boolean;
     }> = [];
 

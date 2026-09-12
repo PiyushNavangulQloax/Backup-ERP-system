@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { useSearch } from '../context/SearchContext';
+import { WorkflowStepper } from '../components/WorkflowStepper';
 import {
   Barcode,
   ScanLine,
@@ -25,6 +26,25 @@ export const BarcodePage: React.FC = () => {
 
   const [lastResult, setLastResult] = useState<any | null>(null);
   const [lastError, setLastError] = useState<string | null>(null);
+  const [scannedStageKey, setScannedStageKey] = useState<string | undefined>(undefined);
+
+  /**
+   * Maps a successful scan result to a workflow stage key so the stepper
+   * highlights where the scanned item currently is in the flow.
+   */
+  const getScannedItemStage = (data: any, action: string): string => {
+    if (action === 'DISPATCH_VERIFY') return 'tracking';
+    if (action === 'BOX_PACK') return 'packing';
+    // LOOKUP — infer stage from the result data
+    if (data?.dispatch || data?.dispatchId) return 'tracking';
+    if (data?.invoice || data?.invoiceId) return 'dispatch';
+    if (data?.box || data?.boxId || data?.packingBoxId) return 'packing';
+    if (data?.jobCard || data?.jobCardId) return 'production';
+    if (data?.part?.partType === 'FINISHED_GOOD') return 'production';
+    if (data?.grn || data?.grnId || data?.poId) return 'procurement';
+    if (data?.part || data?.barcodeValue) return 'masters';
+    return 'masters';
+  };
 
   const { data: history, isLoading: isHistoryLoading } = useQuery({
     queryKey: ['barcode-history'],
@@ -62,6 +82,7 @@ export const BarcodePage: React.FC = () => {
       setLastResult(data);
       setLastError(null);
       setScannedInput('');
+      setScannedStageKey(getScannedItemStage(data, scanAction));
       queryClient.invalidateQueries({ queryKey: ['barcode-history'] });
       queryClient.invalidateQueries({ queryKey: ['boxes'] });
     },
@@ -88,6 +109,8 @@ export const BarcodePage: React.FC = () => {
 
   return (
     <div className="space-y-6">
+      <WorkflowStepper activeStageKey="packing" highlightStageKey={scannedStageKey} />
+
       <div className="pb-4 border-b border-slate-200">
         <h1 className="text-2xl font-black text-slate-900 flex items-center gap-3 tracking-tight">
           <div className="p-2.5 rounded-xl bg-blue-100 text-blue-700">

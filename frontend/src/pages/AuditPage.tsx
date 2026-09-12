@@ -2,6 +2,7 @@ import React from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../services/api';
 import { useSearch } from '../context/SearchContext';
+import { WorkflowStepper } from '../components/WorkflowStepper';
 import { ShieldAlert, Search, X } from 'lucide-react';
 
 export const AuditPage: React.FC = () => {
@@ -27,6 +28,8 @@ export const AuditPage: React.FC = () => {
 
   return (
     <div className="space-y-6">
+      <WorkflowStepper activeStageKey="tracking" />
+
       <div className="pb-4 border-b border-slate-200">
         <h1 className="text-2xl font-black text-slate-900 flex items-center gap-3 tracking-tight">
           <div className="p-2.5 rounded-xl bg-blue-100 text-blue-700">

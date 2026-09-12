@@ -20,6 +20,7 @@ import {
 import { DeliveryChallanModal } from '../components/dispatch/DeliveryChallanModal';
 import { GatePassModal } from '../components/dispatch/GatePassModal';
 import { DocumentChainModal } from '../components/dispatch/DocumentChainModal';
+import { WorkflowStepper } from '../components/WorkflowStepper';
 
 export const DispatchPage: React.FC = () => {
   const queryClient = useQueryClient();
@@ -152,6 +153,8 @@ export const DispatchPage: React.FC = () => {
 
   return (
     <div className="space-y-6">
+      <WorkflowStepper activeStageKey="tracking" />
+
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200">
         <div>
