@@ -4,6 +4,7 @@ import { api } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { useSearch } from '../context/SearchContext';
 import { WorkflowStepper } from '../components/WorkflowStepper';
+import { SearchableSelect } from '../components/SearchableSelect';
 import {
   PackageCheck,
   Plus,
@@ -260,18 +261,22 @@ export const GrnPage: React.FC = () => {
             <form onSubmit={handleSubmit} className="p-6 overflow-y-auto space-y-5 flex-1 bg-white">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-black text-slate-800 uppercase tracking-wider mb-2">Select Approved PO *</label>
-                  <select
-                    required
+                  <label className="block text-xs font-black text-slate-800 uppercase tracking-wider mb-2">
+                    Select Approved PO *
+                  </label>
+                  <SearchableSelect
                     value={selectedPoId}
-                    onChange={(e) => handlePoChange(e.target.value)}
-                    className="w-full bg-white border border-slate-300 rounded-xl px-3.5 py-2.5 text-sm font-bold text-slate-900 focus:ring-2 focus:ring-blue-600 focus:outline-none"
-                  >
-                    <option value="">-- Select Approved PO --</option>
-                    {approvedPOs?.map((po: any) => (
-                      <option key={po.id} value={po.id} className="text-slate-900 font-bold">{po.poNumber} - {po.supplier?.name}</option>
-                    ))}
-                  </select>
+                    onChange={(val) => handlePoChange(val)}
+                    options={
+                      approvedPOs?.map((po: any) => ({
+                        value: po.id,
+                        label: `${po.poNumber} - ${po.supplier?.name}`,
+                        sublabel: `Date: ${new Date(po.orderDate).toLocaleDateString()} | Items: ${po.items?.length || 0}`,
+                        badge: `Total: $${po.grandTotal?.toFixed(2) || '0.00'}`,
+                      })) || []
+                    }
+                    placeholder="-- Search & Select Approved PO --"
+                  />
                 </div>
                 <div>
                   <label className="block text-xs font-black text-slate-800 uppercase tracking-wider mb-2">Supplier Invoice / DC #</label>

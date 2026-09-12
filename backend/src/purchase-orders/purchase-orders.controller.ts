@@ -7,7 +7,9 @@ import {
   Query,
   UseGuards,
   Req,
+  Res,
 } from '@nestjs/common';
+import { Response } from 'express';
 import { PurchaseOrdersService } from './purchase-orders.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
@@ -49,5 +51,17 @@ export class PurchaseOrdersController {
   @RequirePermissions('po.approve')
   reject(@Param('id') id: string, @Req() req: any, @Body() body: { reason: string }) {
     return this.poService.reject(id, req.user.id, body.reason);
+  }
+
+  @Get(':id/pdf')
+  @RequirePermissions('po.view')
+  async downloadPOPDF(@Param('id') id: string, @Res() res: Response) {
+    const buffer = await this.poService.generatePOPDF(id);
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `inline; filename="Purchase_Order_${id}.pdf"`,
+      'Content-Length': buffer.length,
+    });
+    res.end(buffer);
   }
 }

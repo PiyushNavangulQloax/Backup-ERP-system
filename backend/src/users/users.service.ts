@@ -111,4 +111,24 @@ export class UsersService {
       orderBy: { module: 'asc' },
     });
   }
+
+  async updateRolePermissions(roleId: string, permissionIds: string[]) {
+    const role = await this.prisma.role.findUnique({ where: { id: roleId } });
+    if (!role) throw new NotFoundException('Role not found');
+
+    return this.prisma.$transaction(async (tx) => {
+      await tx.rolePermission.deleteMany({ where: { roleId } });
+      if (permissionIds && permissionIds.length > 0) {
+        await tx.rolePermission.createMany({
+          data: permissionIds.map((permissionId) => ({ roleId, permissionId })),
+        });
+      }
+      return tx.role.findUnique({
+        where: { id: roleId },
+        include: {
+          permissions: { include: { permission: true } },
+        },
+      });
+    });
+  }
 }

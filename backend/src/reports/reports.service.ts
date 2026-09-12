@@ -311,5 +311,102 @@ export class ReportsService {
       doc.end();
     });
   }
+
+  async getTraceabilityTree(code: string) {
+    const trimmed = code.trim();
+
+    // 1. Check if it's a Box barcode
+    const box = await this.prisma.box.findFirst({
+      where: {
+        OR: [{ barcode: trimmed }, { boxNumber: trimmed }, { id: trimmed }],
+      },
+      include: {
+        items: {
+          include: {
+            part: { include: { unit: true } },
+            jobCard: {
+              include: {
+                plan: true,
+                materialIssues: { include: { part: true, store: true } },
+              },
+            },
+          },
+        },
+        sealedBy: { select: { firstName: true, lastName: true, email: true } },
+        dispatchBoxes: {
+          include: {
+            dispatch: {
+              include: {
+                customer: true,
+                transporter: true,
+                invoice: { include: { items: true } },
+                deliveryChallan: true,
+                gatePass: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (box) {
+      return {
+        query: trimmed,
+        entityType: 'BOX',
+        data: box,
+      };
+    }
+
+    // 2. Check if it's a Part barcode or code
+    const part = await this.prisma.part.findFirst({
+      where: {
+        OR: [{ barcodeValue: trimmed }, { code: trimmed }, { id: trimmed }],
+      },
+      include: {
+        unit: true,
+        stocks: { include: { store: true, location: true } },
+        grnItems: { include: { grn: { include: { purchaseOrder: { include: { supplier: true } } } } } },
+        bom: { include: { items: { include: { part: true } } } },
+        boxItems: { include: { box: true } },
+      },
+    });
+
+    if (part) {
+      return {
+        query: trimmed,
+        entityType: 'PART',
+        data: part,
+      };
+    }
+
+    // 3. Check if it's a Dispatch number
+    const dispatch = await this.prisma.dispatch.findFirst({
+      where: {
+        OR: [{ dispatchNumber: trimmed }, { id: trimmed }],
+      },
+      include: {
+        customer: true,
+        transporter: true,
+        invoice: { include: { items: true } },
+        deliveryChallan: true,
+        gatePass: true,
+        boxes: { include: { box: { include: { items: { include: { part: true } } } } } },
+      },
+    });
+
+    if (dispatch) {
+      return {
+        query: trimmed,
+        entityType: 'DISPATCH',
+        data: dispatch,
+      };
+    }
+
+    return {
+      query: trimmed,
+      entityType: 'UNKNOWN',
+      message: 'No matching records found across Boxes, Parts, or Dispatches',
+    };
+  }
 }
 

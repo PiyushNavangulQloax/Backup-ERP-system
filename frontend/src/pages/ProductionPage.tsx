@@ -5,6 +5,7 @@ import { api } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { useSearch } from '../context/SearchContext';
 import { WorkflowStepper } from '../components/WorkflowStepper';
+import { SearchableSelect } from '../components/SearchableSelect';
 import {
   Cpu,
   Layers,
@@ -402,19 +403,16 @@ export const ProductionPage: React.FC = () => {
                 <label className="block text-xs font-black text-slate-700 uppercase tracking-wider mb-1">
                   Finished Product / Part *
                 </label>
-                <select
+                <SearchableSelect
                   value={jobForm.partId}
-                  onChange={(e) => setJobForm({ ...jobForm, partId: e.target.value })}
-                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2 text-xs font-bold text-slate-900 focus:outline-none focus:border-blue-600"
-                  required
-                >
-                  <option value="">-- Select Product Part --</option>
-                  {fgParts.map((p: any) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name} ({p.code})
-                    </option>
-                  ))}
-                </select>
+                  onChange={(val) => setJobForm({ ...jobForm, partId: val })}
+                  options={fgParts.map((p: any) => ({
+                    value: p.id,
+                    label: `${p.name} (${p.code})`,
+                    sublabel: `UOM: ${p.uom || 'units'} | Cost: $${p.standardCost || 0}`,
+                  }))}
+                  placeholder="-- Search & Select Finished Product --"
+                />
               </div>
 
               <div>
@@ -478,19 +476,16 @@ export const ProductionPage: React.FC = () => {
                 <label className="block text-xs font-black text-slate-700 uppercase tracking-wider mb-1">
                   Finished Product Part *
                 </label>
-                <select
+                <SearchableSelect
                   value={bomForm.partId}
-                  onChange={(e) => setBomForm({ ...bomForm, partId: e.target.value })}
-                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2 text-xs font-bold text-slate-900 focus:outline-none focus:border-blue-600"
-                  required
-                >
-                  <option value="">-- Select Product --</option>
-                  {fgParts.map((p: any) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name} ({p.code})
-                    </option>
-                  ))}
-                </select>
+                  onChange={(val) => setBomForm({ ...bomForm, partId: val })}
+                  options={fgParts.map((p: any) => ({
+                    value: p.id,
+                    label: `${p.name} (${p.code})`,
+                    sublabel: `UOM: ${p.uom || 'units'}`,
+                  }))}
+                  placeholder="-- Search & Select Product --"
+                />
               </div>
 
               <div>
@@ -511,19 +506,16 @@ export const ProductionPage: React.FC = () => {
                 <label className="block text-xs font-black text-slate-700 uppercase tracking-wider mb-1">
                   Primary Raw Material Component *
                 </label>
-                <select
+                <SearchableSelect
                   value={bomForm.componentPartId}
-                  onChange={(e) => setBomForm({ ...bomForm, componentPartId: e.target.value })}
-                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2 text-xs font-bold text-slate-900 focus:outline-none focus:border-blue-600"
-                  required
-                >
-                  <option value="">-- Select Component Part --</option>
-                  {rawParts.map((p: any) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name} ({p.code})
-                    </option>
-                  ))}
-                </select>
+                  onChange={(val) => setBomForm({ ...bomForm, componentPartId: val })}
+                  options={rawParts.map((p: any) => ({
+                    value: p.id,
+                    label: `${p.name} (${p.code})`,
+                    sublabel: `UOM: ${p.uom || 'units'} | Cost: $${p.standardCost || 0}`,
+                  }))}
+                  placeholder="-- Search & Select Component Part --"
+                />
               </div>
 
               <div>
@@ -603,18 +595,18 @@ export const ProductionPage: React.FC = () => {
                 <label className="block text-xs font-black text-slate-700 uppercase tracking-wider mb-1">
                   Receiving Store Location
                 </label>
-                <select
+                <SearchableSelect
                   value={selectedStoreId}
-                  onChange={(e) => setSelectedStoreId(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2 text-xs font-bold text-slate-900"
-                  required
-                >
-                  {stores?.map((s: any) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name} ({s.code})
-                    </option>
-                  ))}
-                </select>
+                  onChange={setSelectedStoreId}
+                  options={
+                    stores?.map((s: any) => ({
+                      value: s.id,
+                      label: `${s.name} (${s.code})`,
+                      badge: s.type || undefined,
+                    })) || []
+                  }
+                  placeholder="-- Search & Select Store --"
+                />
               </div>
 
               <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-200">

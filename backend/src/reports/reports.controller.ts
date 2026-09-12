@@ -59,4 +59,10 @@ export class ReportsController {
     );
     res.send(buffer);
   }
+
+  @Get('traceability/:code')
+  @RequirePermissions('reports.view')
+  getTraceabilityTree(@Param('code') code: string) {
+    return this.reportsService.getTraceabilityTree(code);
+  }
 }
