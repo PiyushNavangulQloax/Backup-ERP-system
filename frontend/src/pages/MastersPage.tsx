@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../services/api';
 import {
@@ -11,14 +12,30 @@ import {
   X,
   AlertCircle,
   Search,
+  ArrowRight,
 } from 'lucide-react';
+import { useEffect } from 'react';
 
 import { useSearch } from '../context/SearchContext';
+import { WorkflowStepper } from '../components/WorkflowStepper';
 
 export const MastersPage: React.FC = () => {
+  const navigate = useNavigate();
+  const location = useLocation();
   const queryClient = useQueryClient();
   const { searchQuery, setSearchQuery } = useSearch();
-  const [tab, setTab] = useState<'parts' | 'customers' | 'suppliers' | 'stores'>('parts');
+  
+  const searchParams = new URLSearchParams(location.search);
+  const initialTab = (searchParams.get('tab') as any) || 'parts';
+  const [tab, setTab] = useState<'parts' | 'customers' | 'suppliers' | 'stores'>(initialTab);
+
+  useEffect(() => {
+    const currentTab = searchParams.get('tab');
+    if (currentTab && ['parts', 'customers', 'suppliers', 'stores'].includes(currentTab)) {
+      setTab(currentTab as any);
+    }
+  }, [location.search]);
+
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
@@ -316,6 +333,8 @@ export const MastersPage: React.FC = () => {
 
   return (
     <div className="space-y-6">
+      <WorkflowStepper activeStageKey={tab === 'customers' ? 'customer' : 'masters'} />
+
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-4 border-b border-slate-200">
         <div>
           <h1 className="text-2xl font-black text-slate-900 flex items-center gap-3 tracking-tight">

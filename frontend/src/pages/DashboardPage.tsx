@@ -19,8 +19,10 @@ import {
   CheckCircle2,
   Clock,
   ChevronRight,
+  GitFork,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { WorkflowStepper } from '../components/WorkflowStepper';
 
 export const DashboardPage: React.FC = () => {
   const [revenueTab, setRevenueTab] = useState<'customer' | 'product' | 'status'>('customer');
@@ -165,6 +167,9 @@ export const DashboardPage: React.FC = () => {
           </Link>
         </div>
       </div>
+
+      {/* 8-Stage Business Flow Stepper Banner */}
+      <WorkflowStepper activeStageKey="dashboard" />
 
       {/* KPI Cards Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

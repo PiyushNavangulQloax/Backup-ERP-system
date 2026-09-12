@@ -1,22 +1,66 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { useSearch } from '../context/SearchContext';
+import { WorkflowStepper } from '../components/WorkflowStepper';
 import {
   Cpu,
   Layers,
   Play,
   X,
   Search,
+  Plus,
+  AlertCircle,
+  FilePlus,
+  CheckCircle2,
 } from 'lucide-react';
 
 export const ProductionPage: React.FC = () => {
   const queryClient = useQueryClient();
   const { hasPermission } = useAuth();
   const { searchQuery, setSearchQuery } = useSearch();
-  const [activeTab, setActiveTab] = useState<'jobCards' | 'bom'>('jobCards');
+  const location = useLocation();
 
+  const getInitialTab = (): 'jobCards' | 'bom' => {
+    const tab = new URLSearchParams(location.search).get('tab');
+    if (tab === 'plans' || tab === 'bom') return 'bom';
+    return 'jobCards';
+  };
+
+  const [activeTab, setActiveTab] = useState<'jobCards' | 'bom'>(getInitialTab);
+
+  useEffect(() => {
+    const tab = new URLSearchParams(location.search).get('tab');
+    if (tab === 'plans' || tab === 'bom') {
+      setActiveTab('bom');
+    } else if (tab === 'jobCards') {
+      setActiveTab('jobCards');
+    }
+  }, [location.search]);
+
+  // Modals for creating Job Card & BOM
+  const [isJobModalOpen, setIsJobModalOpen] = useState(false);
+  const [isBomModalOpen, setIsBomModalOpen] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
+
+  // Job Card Form State
+  const [jobForm, setJobForm] = useState({
+    partId: '',
+    targetQty: 50,
+  });
+
+  // BOM Form State
+  const [bomForm, setBomForm] = useState({
+    partId: '',
+    bomCode: '',
+    notes: '',
+    componentPartId: '',
+    componentQty: 1,
+  });
+
+  // Data Queries
   const { data: jobCards, isLoading: isJobsLoading } = useQuery({
     queryKey: ['job-cards'],
     queryFn: async () => (await api.get('/production/job-cards')).data,
@@ -25,12 +69,16 @@ export const ProductionPage: React.FC = () => {
   const { data: boms } = useQuery({
     queryKey: ['boms'],
     queryFn: async () => (await api.get('/production/bom')).data,
-    enabled: activeTab === 'bom',
   });
 
   const { data: stores } = useQuery({
     queryKey: ['stores'],
     queryFn: async () => (await api.get('/masters/stores')).data,
+  });
+
+  const { data: parts } = useQuery({
+    queryKey: ['parts'],
+    queryFn: async () => (await api.get('/masters/parts')).data,
   });
 
   // Filter data by search query
@@ -59,6 +107,38 @@ export const ProductionPage: React.FC = () => {
   const [rejectedQty, setRejectedQty] = useState(0);
   const [selectedStoreId, setSelectedStoreId] = useState('');
 
+  // Create Job Card Mutation
+  const createJobCardMutation = useMutation({
+    mutationFn: async (payload: any) => {
+      return (await api.post('/production/job-cards', payload)).data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['job-cards'] });
+      setIsJobModalOpen(false);
+      setJobForm({ partId: '', targetQty: 50 });
+      setErrorMsg('');
+    },
+    onError: (err: any) => {
+      setErrorMsg(err?.response?.data?.message || 'Failed to create job card');
+    },
+  });
+
+  // Create BOM Mutation
+  const createBomMutation = useMutation({
+    mutationFn: async (payload: any) => {
+      return (await api.post('/production/bom', payload)).data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['boms'] });
+      setIsBomModalOpen(false);
+      setBomForm({ partId: '', bomCode: '', notes: '', componentPartId: '', componentQty: 1 });
+      setErrorMsg('');
+    },
+    onError: (err: any) => {
+      setErrorMsg(err?.response?.data?.message || 'Failed to create BOM');
+    },
+  });
+
   const completeJobMutation = useMutation({
     mutationFn: async ({ id, payload }: any) => {
       return (await api.post(`/production/job-cards/${id}/complete`, payload)).data;
@@ -69,6 +149,37 @@ export const ProductionPage: React.FC = () => {
       setCompleteJobId(null);
     },
   });
+
+  const handleCreateJob = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!jobForm.partId) {
+      setErrorMsg('Please select a target finished good part');
+      return;
+    }
+    createJobCardMutation.mutate({
+      partId: jobForm.partId,
+      targetQty: Number(jobForm.targetQty),
+    });
+  };
+
+  const handleCreateBom = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!bomForm.partId || !bomForm.bomCode || !bomForm.componentPartId) {
+      setErrorMsg('Please complete all required fields for BOM creation');
+      return;
+    }
+    createBomMutation.mutate({
+      partId: bomForm.partId,
+      bomCode: bomForm.bomCode.toUpperCase(),
+      notes: bomForm.notes,
+      items: [
+        {
+          partId: bomForm.componentPartId,
+          quantityRequired: Number(bomForm.componentQty),
+        },
+      ],
+    });
+  };
 
   const handleCompleteSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -84,18 +195,51 @@ export const ProductionPage: React.FC = () => {
     });
   };
 
+  const fgParts = parts?.filter((p: any) => p.partType === 'FINISHED_GOOD' || p.partType === 'RAW_MATERIAL') || [];
+  const rawParts = parts?.filter((p: any) => p.partType === 'RAW_MATERIAL' || p.partType === 'SEMI_FINISHED') || [];
+
   return (
     <div className="space-y-6">
-      <div className="pb-4 border-b border-slate-200">
-        <h1 className="text-2xl font-black text-slate-900 flex items-center gap-3">
-          <div className="p-2.5 rounded-xl bg-blue-100 text-blue-700">
-            <Cpu className="w-6 h-6 stroke-[2.5]" />
+      <WorkflowStepper activeStageKey={activeTab === 'bom' ? 'requirements' : 'production'} />
+
+      <div className="pb-4 border-b border-slate-200 flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-black text-slate-900 flex items-center gap-3">
+            <div className="p-2.5 rounded-xl bg-blue-100 text-blue-700">
+              <Cpu className="w-6 h-6 stroke-[2.5]" />
+            </div>
+            <span>Production & Bill of Materials</span>
+          </h1>
+          <p className="text-sm font-semibold text-slate-600 mt-1">
+            Manufacturing execution, shopfloor Job Cards & component recipe specifications
+          </p>
+        </div>
+
+        {hasPermission('production.manage') && (
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => {
+                setErrorMsg('');
+                setIsJobModalOpen(true);
+              }}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-black text-xs shadow-md transition-all"
+            >
+              <Plus className="w-4 h-4 stroke-[2.5]" />
+              <span>Create Job Card</span>
+            </button>
+
+            <button
+              onClick={() => {
+                setErrorMsg('');
+                setIsBomModalOpen(true);
+              }}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-black text-xs shadow-md transition-all"
+            >
+              <FilePlus className="w-4 h-4 text-cyan-400 stroke-[2.5]" />
+              <span>Create BOM Recipe</span>
+            </button>
           </div>
-          <span>Production & Bill of Materials</span>
-        </h1>
-        <p className="text-sm font-semibold text-slate-600 mt-1">
-          Manufacturing execution, shopfloor Job Cards & component recipe specifications
-        </p>
+        )}
       </div>
 
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
@@ -232,70 +376,261 @@ export const ProductionPage: React.FC = () => {
         </div>
       )}
 
+      {/* Create Job Card Modal */}
+      {isJobModalOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white border border-slate-300 rounded-3xl w-full max-w-md p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+              <h2 className="text-lg font-black text-slate-900 flex items-center gap-2">
+                <Play className="w-5 h-5 text-blue-600" />
+                <span>Create Production Job Card</span>
+              </h2>
+              <button onClick={() => setIsJobModalOpen(false)} className="text-slate-400 hover:text-slate-700">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {errorMsg && (
+              <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-bold flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                <span>{errorMsg}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleCreateJob} className="space-y-4">
+              <div>
+                <label className="block text-xs font-black text-slate-700 uppercase tracking-wider mb-1">
+                  Finished Product / Part *
+                </label>
+                <select
+                  value={jobForm.partId}
+                  onChange={(e) => setJobForm({ ...jobForm, partId: e.target.value })}
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2 text-xs font-bold text-slate-900 focus:outline-none focus:border-blue-600"
+                  required
+                >
+                  <option value="">-- Select Product Part --</option>
+                  {fgParts.map((p: any) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name} ({p.code})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-black text-slate-700 uppercase tracking-wider mb-1">
+                  Target Production Quantity *
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  value={jobForm.targetQty}
+                  onChange={(e) => setJobForm({ ...jobForm, targetQty: Number(e.target.value) })}
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2 text-xs font-bold text-slate-900 focus:outline-none focus:border-blue-600 font-mono"
+                  required
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-200">
+                <button
+                  type="button"
+                  onClick={() => setIsJobModalOpen(false)}
+                  className="px-4 py-2 rounded-xl border border-slate-300 font-black text-xs text-slate-700 hover:bg-slate-100"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={createJobCardMutation.isPending}
+                  className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-black text-xs shadow-md"
+                >
+                  {createJobCardMutation.isPending ? 'Releasing...' : 'Release Job Card'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Create BOM Modal */}
+      {isBomModalOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white border border-slate-300 rounded-3xl w-full max-w-md p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+              <h2 className="text-lg font-black text-slate-900 flex items-center gap-2">
+                <Layers className="w-5 h-5 text-cyan-600" />
+                <span>Create Bill of Materials (BOM)</span>
+              </h2>
+              <button onClick={() => setIsBomModalOpen(false)} className="text-slate-400 hover:text-slate-700">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {errorMsg && (
+              <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-bold flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                <span>{errorMsg}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleCreateBom} className="space-y-4">
+              <div>
+                <label className="block text-xs font-black text-slate-700 uppercase tracking-wider mb-1">
+                  Finished Product Part *
+                </label>
+                <select
+                  value={bomForm.partId}
+                  onChange={(e) => setBomForm({ ...bomForm, partId: e.target.value })}
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2 text-xs font-bold text-slate-900 focus:outline-none focus:border-blue-600"
+                  required
+                >
+                  <option value="">-- Select Product --</option>
+                  {fgParts.map((p: any) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name} ({p.code})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-black text-slate-700 uppercase tracking-wider mb-1">
+                  BOM Code / Number *
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. BOM-FG-101"
+                  value={bomForm.bomCode}
+                  onChange={(e) => setBomForm({ ...bomForm, bomCode: e.target.value })}
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2 text-xs font-bold text-slate-900 focus:outline-none focus:border-blue-600 font-mono uppercase"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-black text-slate-700 uppercase tracking-wider mb-1">
+                  Primary Raw Material Component *
+                </label>
+                <select
+                  value={bomForm.componentPartId}
+                  onChange={(e) => setBomForm({ ...bomForm, componentPartId: e.target.value })}
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2 text-xs font-bold text-slate-900 focus:outline-none focus:border-blue-600"
+                  required
+                >
+                  <option value="">-- Select Component Part --</option>
+                  {rawParts.map((p: any) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name} ({p.code})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-black text-slate-700 uppercase tracking-wider mb-1">
+                  Quantity Required Per Unit *
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0.01"
+                  value={bomForm.componentQty}
+                  onChange={(e) => setBomForm({ ...bomForm, componentQty: Number(e.target.value) })}
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2 text-xs font-bold text-slate-900 focus:outline-none focus:border-blue-600 font-mono"
+                  required
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-200">
+                <button
+                  type="button"
+                  onClick={() => setIsBomModalOpen(false)}
+                  className="px-4 py-2 rounded-xl border border-slate-300 font-black text-xs text-slate-700 hover:bg-slate-100"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={createBomMutation.isPending}
+                  className="px-5 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-700 text-white font-black text-xs shadow-md"
+                >
+                  {createBomMutation.isPending ? 'Saving...' : 'Save BOM Recipe'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* Completion Modal */}
       {completeJobId && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white border border-slate-300 rounded-3xl w-full max-w-md p-6 shadow-2xl space-y-4">
             <div className="flex items-center justify-between border-b border-slate-200 pb-3">
               <h2 className="text-lg font-black text-slate-900">Post Production Output</h2>
-              <button onClick={() => setCompleteJobId(null)} className="text-slate-500 hover:text-slate-900">
-                <X className="w-5 h-5 stroke-[2.5]" />
+              <button onClick={() => setCompleteJobId(null)} className="text-slate-400 hover:text-slate-700">
+                <X className="w-5 h-5" />
               </button>
             </div>
 
             <form onSubmit={handleCompleteSubmit} className="space-y-4">
               <div>
-                <label className="block text-xs font-black text-slate-800 uppercase tracking-wider mb-2">Target Deposit Store</label>
-                <select
+                <label className="block text-xs font-black text-slate-700 uppercase tracking-wider mb-1">
+                  Produced Quantity
+                </label>
+                <input
+                  type="number"
+                  value={producedQty}
+                  onChange={(e) => setProducedQty(Number(e.target.value))}
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2 text-xs font-bold text-slate-900"
                   required
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-black text-slate-700 uppercase tracking-wider mb-1">
+                  Rejected / Scrap Quantity
+                </label>
+                <input
+                  type="number"
+                  value={rejectedQty}
+                  onChange={(e) => setRejectedQty(Number(e.target.value))}
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2 text-xs font-bold text-slate-900"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-black text-slate-700 uppercase tracking-wider mb-1">
+                  Receiving Store Location
+                </label>
+                <select
                   value={selectedStoreId}
                   onChange={(e) => setSelectedStoreId(e.target.value)}
-                  className="w-full bg-white border border-slate-300 rounded-xl px-3.5 py-2.5 text-sm font-bold text-slate-900 focus:ring-2 focus:ring-blue-600 focus:outline-none"
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2 text-xs font-bold text-slate-900"
+                  required
                 >
                   {stores?.map((s: any) => (
-                    <option key={s.id} value={s.id} className="text-slate-900 font-bold">{s.name} ({s.type})</option>
+                    <option key={s.id} value={s.id}>
+                      {s.name} ({s.code})
+                    </option>
                   ))}
                 </select>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-black text-emerald-700 uppercase tracking-wider mb-2">Produced Qty</label>
-                  <input
-                    type="number"
-                    min="1"
-                    required
-                    value={producedQty}
-                    onChange={(e) => setProducedQty(parseFloat(e.target.value) || 0)}
-                    className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-sm font-bold text-slate-900 font-mono"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-black text-rose-700 uppercase tracking-wider mb-2">Scrap / Rejected</label>
-                  <input
-                    type="number"
-                    min="0"
-                    value={rejectedQty}
-                    onChange={(e) => setRejectedQty(parseFloat(e.target.value) || 0)}
-                    className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-sm font-bold text-slate-900 font-mono"
-                  />
-                </div>
-              </div>
-
-              <div className="pt-4 border-t border-slate-200 flex justify-end gap-3">
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-200">
                 <button
                   type="button"
                   onClick={() => setCompleteJobId(null)}
-                  className="px-5 py-2.5 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-800 text-xs font-black"
+                  className="px-4 py-2 rounded-xl border border-slate-300 font-black text-xs text-slate-700 hover:bg-slate-100"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={completeJobMutation.isPending}
-                  className="px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black shadow-md"
+                  className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs shadow-md"
                 >
-                  Confirm Completion
+                  {completeJobMutation.isPending ? 'Posting...' : 'Post Completion'}
                 </button>
               </div>
             </form>
