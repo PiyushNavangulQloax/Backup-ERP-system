@@ -103,6 +103,9 @@ model Supplier {
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
   purchaseOrders PurchaseOrder[]
+  parts          Part[]
+  stocks         Stock[]
+  stockMovements StockMovement[]
 }
 
 model Unit {
@@ -157,6 +160,8 @@ model Part {
   standardCost   Float           @default(0)
   hsnCode        String?
   barcodeValue   String?         @unique
+  supplierId     String?
+  supplier       Supplier?       @relation(fields: [supplierId], references: [id])
   isActive       Boolean         @default(true)
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
@@ -341,6 +346,9 @@ model Stock {
   quantityOnHand Float     @default(0)
   reservedQty    Float     @default(0)
   batchNumber    String?
+  supplierId     String?
+  supplier       Supplier? @relation(fields: [supplierId], references: [id])
+  lastInwardAt   DateTime?
   updatedAt      DateTime  @updatedAt
 
   @@unique([partId, storeId, locationId, batchNumber])
@@ -360,6 +368,8 @@ model StockMovement {
   referenceId   String?
   batchNumber   String?
   reason        String?
+  supplierId    String?
+  supplier      Supplier? @relation(fields: [supplierId], references: [id])
   performedById String
   performedBy   User      @relation("StockMovementUser", fields: [performedById], references: [id])
   createdAt     DateTime  @default(now())

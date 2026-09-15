@@ -61,6 +61,7 @@ export const MastersPage: React.FC = () => {
     description: '',
     partType: 'RAW_MATERIAL',
     unitId: '',
+    supplierId: '',
     openingStock: 0,
     minStockLevel: 0,
     standardCost: 0,
@@ -154,6 +155,7 @@ export const MastersPage: React.FC = () => {
         description: '',
         partType: 'RAW_MATERIAL',
         unitId: units?.[0]?.id || '',
+        supplierId: '',
         openingStock: 0,
         minStockLevel: 0,
         standardCost: 0,
@@ -383,8 +385,20 @@ export const MastersPage: React.FC = () => {
     setEditingId(null);
     setErrorMsg('');
     setShowQuickAddUnit(false);
-    if (tab === 'parts' && !partForm.unitId && units && units.length > 0) {
-      setPartForm((prev) => ({ ...prev, unitId: units[0].id }));
+    if (tab === 'parts') {
+      setPartForm({
+        code: '',
+        name: '',
+        description: '',
+        partType: 'RAW_MATERIAL',
+        unitId: units && units.length > 0 ? units[0].id : '',
+        supplierId: '',
+        openingStock: 0,
+        minStockLevel: 0,
+        standardCost: 0,
+        hsnCode: '',
+        barcodeValue: '',
+      });
     }
     setIsModalOpen(true);
   };
@@ -408,6 +422,7 @@ export const MastersPage: React.FC = () => {
         description: item.description || '',
         partType: item.partType || 'RAW_MATERIAL',
         unitId: item.unitId || '',
+        supplierId: item.supplierId || item.supplier?.id || '',
         openingStock: currentStock,
         minStockLevel: item.minStockLevel || 0,
         standardCost: item.standardCost || 0,
@@ -617,7 +632,9 @@ export const MastersPage: React.FC = () => {
       p.barcodeValue?.toLowerCase().includes(q) ||
       p.partType?.toLowerCase().includes(q) ||
       p.hsnCode?.toLowerCase().includes(q) ||
-      p.unit?.symbol?.toLowerCase().includes(q)
+      p.unit?.symbol?.toLowerCase().includes(q) ||
+      p.supplier?.name?.toLowerCase().includes(q) ||
+      p.supplier?.code?.toLowerCase().includes(q)
     );
   });
 
@@ -760,6 +777,7 @@ export const MastersPage: React.FC = () => {
                   <th className="py-4 px-5">Part Name</th>
                   <th className="py-4 px-5">Classification</th>
                   <th className="py-4 px-5">Unit</th>
+                  <th className="py-4 px-5">Supplier / Vendor</th>
                   <th className="py-4 px-5">Available Stock</th>
                   <th className="py-4 px-5">Std Cost</th>
                   <th className="py-4 px-5">Barcode Identifier</th>
@@ -768,10 +786,10 @@ export const MastersPage: React.FC = () => {
               </thead>
               <tbody className="divide-y divide-slate-200">
                 {isPartsLoading ? (
-                  <tr><td colSpan={8} className="text-center py-12 text-slate-600 font-bold">Loading parts...</td></tr>
+                  <tr><td colSpan={9} className="text-center py-12 text-slate-600 font-bold">Loading parts...</td></tr>
                 ) : filteredParts?.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="text-center py-12 text-slate-500 font-medium">
+                    <td colSpan={9} className="text-center py-12 text-slate-500 font-medium">
                       {searchQuery ? (
                         <span>
                           No parts found matching &ldquo;<span className="font-bold text-slate-800">{searchQuery}</span>&rdquo;.{' '}
@@ -802,6 +820,19 @@ export const MastersPage: React.FC = () => {
                         </span>
                       </td>
                       <td className="py-4 px-5 font-mono text-slate-800 font-bold">{p.unit?.symbol}</td>
+                      <td className="py-4 px-5">
+                        {p.supplier ? (
+                          <div className="flex items-center gap-2">
+                            <Building className="w-4 h-4 text-blue-600 shrink-0" />
+                            <div>
+                              <div className="text-slate-900 font-bold text-xs">{p.supplier.name}</div>
+                              <div className="text-slate-500 font-mono text-[10px]">{p.supplier.code}</div>
+                            </div>
+                          </div>
+                        ) : (
+                          <span className="text-slate-400 font-mono text-xs">—</span>
+                        )}
+                      </td>
                       <td className="py-4 px-5 font-mono">
                         <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black border ${
                           stock > 0
@@ -818,6 +849,14 @@ export const MastersPage: React.FC = () => {
                       </td>
                     <td className="py-4 px-5 text-right whitespace-nowrap">
                       <div className="flex items-center justify-end gap-1">
+                        <button
+                          onClick={() => navigate('/inventory')}
+                          className="p-1.5 rounded-lg text-emerald-600 hover:text-emerald-800 hover:bg-emerald-50 transition-colors border border-transparent hover:border-emerald-200 flex items-center gap-1"
+                          title="Inward / Add Stock & Boxes in Inventory"
+                        >
+                          <Boxes className="w-4 h-4" />
+                          <span className="text-[11px] font-black">+ Stock</span>
+                        </button>
                         <button
                           onClick={() => handleEdit(p, 'parts')}
                           className="p-1.5 rounded-lg text-slate-500 hover:text-blue-600 hover:bg-blue-50 transition-colors border border-transparent hover:border-blue-200"
@@ -1340,6 +1379,25 @@ export const MastersPage: React.FC = () => {
                       className="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
                   </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-black text-slate-700 mb-1">
+                    Preferred Supplier / Origin Vendor
+                  </label>
+                  <SearchableSelect
+                    value={partForm.supplierId}
+                    onChange={(val) => setPartForm({ ...partForm, supplierId: val })}
+                    options={
+                      suppliers?.map((s: any) => ({
+                        value: s.id,
+                        label: `${s.name} (${s.code})`,
+                        sublabel: s.phone ? `Phone: ${s.phone} | GSTIN: ${s.gstin || 'N/A'}` : undefined,
+                        badge: s.code,
+                      })) || []
+                    }
+                    placeholder="-- Select Preferred Supplier / Vendor --"
+                  />
                 </div>
 
                 <div>

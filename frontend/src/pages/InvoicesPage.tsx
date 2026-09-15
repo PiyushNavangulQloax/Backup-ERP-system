@@ -15,6 +15,8 @@ import {
   FileText,
   AlertTriangle,
   Trash2,
+  CreditCard,
+  Boxes,
 } from 'lucide-react';
 
 export const InvoicesPage: React.FC = () => {
@@ -22,6 +24,12 @@ export const InvoicesPage: React.FC = () => {
   const { hasPermission } = useAuth();
   const { searchQuery, setSearchQuery } = useSearch();
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [confirmModalInvoice, setConfirmModalInvoice] = useState<any | null>(null);
+  const [paymentForm, setPaymentForm] = useState({
+    paymentMethod: 'CASH',
+    transactionRef: '',
+    notes: '',
+  });
 
   const { data: invoices, isLoading } = useQuery({
     queryKey: ['invoices'],
@@ -102,6 +110,20 @@ export const InvoicesPage: React.FC = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['invoices'] });
+    },
+  });
+
+  const confirmPaymentMutation = useMutation({
+    mutationFn: async ({ id, payload }: { id: string; payload: any }) => {
+      return (await api.post(`/invoices/${id}/confirm`, payload)).data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['invoices'] });
+      queryClient.invalidateQueries({ queryKey: ['parts'] });
+      queryClient.invalidateQueries({ queryKey: ['inventory-stock'] });
+      queryClient.invalidateQueries({ queryKey: ['inventory-ledger'] });
+      setConfirmModalInvoice(null);
+      setPaymentForm({ paymentMethod: 'CASH', transactionRef: '', notes: '' });
     },
   });
 
@@ -213,11 +235,15 @@ export const InvoicesPage: React.FC = () => {
                       ${inv.grandTotal?.toLocaleString('en-US', { minimumFractionDigits: 2 })}
                     </td>
                     <td className="py-4 px-5">
-                      <span className={`px-3 py-1 rounded-full text-xs font-black tracking-wide border ${
-                        inv.status === 'APPROVED' ? 'bg-emerald-100 text-emerald-800 border-emerald-300' :
-                        'bg-amber-100 text-amber-800 border-amber-300'
+                      <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black tracking-wide border ${
+                        inv.status === 'PAID'
+                          ? 'bg-emerald-100 text-emerald-800 border-emerald-300 shadow-sm'
+                          : inv.status === 'APPROVED'
+                          ? 'bg-blue-100 text-blue-800 border-blue-300'
+                          : 'bg-amber-100 text-amber-800 border-amber-300'
                       }`}>
-                        {inv.status}
+                        {inv.status === 'PAID' && <CheckCircle className="w-3.5 h-3.5 text-emerald-700 stroke-[2.5]" />}
+                        {inv.status === 'PAID' ? 'PAID & FULFILLED' : inv.status}
                       </span>
                     </td>
                     <td className="py-4 px-5 text-right">
@@ -233,10 +259,29 @@ export const InvoicesPage: React.FC = () => {
                         {inv.status === 'DRAFT' && hasPermission('billing.approve') && (
                           <button
                             onClick={() => approveInvoiceMutation.mutate(inv.id)}
-                            className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs shadow-sm transition-all"
+                            className="px-3.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-black text-xs shadow-sm transition-all"
                           >
                             Approve
                           </button>
+                        )}
+                        {inv.status !== 'PAID' && hasPermission('billing.manage') && (
+                          <button
+                            onClick={() => {
+                              setConfirmModalInvoice(inv);
+                              setPaymentForm({ paymentMethod: 'CASH', transactionRef: '', notes: '' });
+                            }}
+                            className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs shadow-sm transition-all flex items-center gap-1.5"
+                            title="Confirm Payment & Deduct Stock"
+                          >
+                            <CheckCircle className="w-3.5 h-3.5 stroke-[2.5]" />
+                            <span>Confirm Payment</span>
+                          </button>
+                        )}
+                        {inv.status === 'PAID' && (
+                          <span className="text-emerald-700 font-black text-xs flex items-center gap-1 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200">
+                            <CheckCircle className="w-3.5 h-3.5 text-emerald-600 stroke-[2.5]" />
+                            Fulfilled
+                          </span>
                         )}
                       </div>
                     </td>
@@ -471,6 +516,174 @@ export const InvoicesPage: React.FC = () => {
                 >
                   Create Invoice
                 </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Confirm Payment & Order Fulfillment Modal */}
+      {confirmModalInvoice && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white border border-slate-300 rounded-3xl w-full max-w-xl p-6 shadow-2xl space-y-5 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-slate-200 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-xl bg-emerald-100 text-emerald-700">
+                  <CreditCard className="w-6 h-6 stroke-[2.5]" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-black text-slate-900">Confirm Payment & Complete Order</h2>
+                  <p className="text-xs font-semibold text-slate-500 mt-0.5">
+                    Invoice #{confirmModalInvoice.invoiceNumber} • {confirmModalInvoice.customer?.name}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setConfirmModalInvoice(null)}
+                className="text-slate-400 hover:text-slate-800 p-2 rounded-lg hover:bg-slate-100 transition-colors"
+              >
+                <X className="w-5 h-5 stroke-[2.5]" />
+              </button>
+            </div>
+
+            {/* Item Stock Deduction Breakdown */}
+            <div className="space-y-2.5">
+              <label className="text-xs font-black text-slate-800 uppercase tracking-wider block">
+                Order Items & Stock Balance Impact
+              </label>
+              <div className="bg-slate-50 border border-slate-200 rounded-2xl divide-y divide-slate-200 overflow-hidden text-xs">
+                {confirmModalInvoice.items?.map((item: any, idx: number) => {
+                  const storeStock =
+                    item.part?.stocks?.reduce(
+                      (acc: number, s: any) => acc + (Number(s.quantityOnHand ?? s.quantity ?? 0)),
+                      0
+                    ) || 0;
+                  const available =
+                    storeStock > 0
+                      ? storeStock
+                      : Number(item.part?.availableStock ?? item.part?.minStockLevel ?? 0);
+                  const remaining = Math.max(0, available - item.quantity);
+                  const uom =
+                    item.part?.unit?.symbol ||
+                    item.part?.unit?.name ||
+                    item.part?.uom ||
+                    'BOX';
+
+                  return (
+                    <div key={idx} className="p-3.5 flex items-center justify-between gap-3">
+                      <div>
+                        <div className="font-bold text-slate-900 text-sm">
+                          {item.part?.name || 'Product'}
+                        </div>
+                        <div className="font-mono text-slate-500 text-[11px] font-semibold">
+                          {item.part?.code}
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className="font-black text-slate-900 text-sm">
+                          Order Qty: <span className="font-mono text-blue-700">{item.quantity} {uom}</span>
+                        </div>
+                        <div className="text-[11px] text-slate-600 font-semibold mt-0.5">
+                          Available: <span className="font-mono font-bold text-slate-800">{available}</span> → Projected Remaining:{' '}
+                          <span className={`font-mono font-black ${remaining <= 0 ? 'text-amber-700' : 'text-emerald-700'}`}>
+                            {remaining} {uom}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Informative stock update alert banner */}
+            <div className="p-3.5 rounded-2xl bg-blue-50 border border-blue-200 flex items-start gap-2.5 text-blue-950 text-xs shadow-sm">
+              <Boxes className="w-5 h-5 text-blue-700 shrink-0 mt-0.5" />
+              <p className="leading-relaxed">
+                <span className="font-black text-blue-900">Automatic Stock Deduction: </span>
+                Upon confirming payment and completing this order, the purchased box quantity will be deducted from active warehouse stock and logged in the immutable Stock Ledger.
+              </p>
+            </div>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                confirmPaymentMutation.mutate({
+                  id: confirmModalInvoice.id,
+                  payload: paymentForm,
+                });
+              }}
+              className="space-y-4"
+            >
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-black text-slate-800 uppercase tracking-wider mb-1.5">
+                    Payment Method *
+                  </label>
+                  <select
+                    value={paymentForm.paymentMethod}
+                    onChange={(e) => setPaymentForm({ ...paymentForm, paymentMethod: e.target.value })}
+                    className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 focus:outline-none focus:border-blue-600 shadow-sm"
+                  >
+                    <option value="CASH">Cash (Immediate Settlement)</option>
+                    <option value="BANK_TRANSFER">Bank Transfer (NEFT / RTGS)</option>
+                    <option value="UPI">UPI / Digital Payment</option>
+                    <option value="CARD">Credit / Debit Card</option>
+                    <option value="CHEQUE">Cheque / Demand Draft</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-black text-slate-800 uppercase tracking-wider mb-1.5">
+                    Transaction / Cheque Ref #
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. TXN-984210 or Cheque #"
+                    value={paymentForm.transactionRef}
+                    onChange={(e) => setPaymentForm({ ...paymentForm, transactionRef: e.target.value })}
+                    className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-mono font-bold text-slate-900 focus:outline-none focus:border-blue-600 shadow-sm"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-black text-slate-800 uppercase tracking-wider mb-1.5">
+                  Audit / Payment Notes (Optional)
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Full settlement received by finance desk"
+                  value={paymentForm.notes}
+                  onChange={(e) => setPaymentForm({ ...paymentForm, notes: e.target.value })}
+                  className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-semibold text-slate-900 focus:outline-none focus:border-blue-600 shadow-sm"
+                />
+              </div>
+
+              <div className="pt-3 border-t border-slate-200 flex items-center justify-between">
+                <div>
+                  <span className="text-xs text-slate-500 font-bold block">Total Amount Paid:</span>
+                  <div className="text-xl font-mono font-black text-slate-900">
+                    ${confirmModalInvoice.grandTotal?.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setConfirmModalInvoice(null)}
+                    className="px-4 py-2.5 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-800 text-xs font-black transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={confirmPaymentMutation.isPending}
+                    className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black shadow-md transition-all flex items-center gap-1.5 disabled:opacity-50"
+                  >
+                    <CheckCircle className="w-4 h-4 stroke-[2.5]" />
+                    <span>{confirmPaymentMutation.isPending ? 'Processing...' : 'Confirm Payment & Complete Order'}</span>
+                  </button>
+                </div>
               </div>
             </form>
           </div>

@@ -47,6 +47,16 @@ export class InvoicesController {
     return this.invoicesService.approve(id);
   }
 
+  @Post(':id/confirm')
+  @RequirePermissions('billing.manage')
+  confirmPayment(
+    @Param('id') id: string,
+    @Req() req: any,
+    @Body() body: any,
+  ) {
+    return this.invoicesService.confirmPayment(id, req.user.id, body);
+  }
+
   @Get(':id/pdf')
   @RequirePermissions('billing.view')
   async downloadInvoicePDF(@Param('id') id: string, @Res() res: Response) {
