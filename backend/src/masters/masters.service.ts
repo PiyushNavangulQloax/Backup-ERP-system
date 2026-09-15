@@ -54,7 +54,11 @@ export class MastersService {
   // Parts
   async getParts() {
     const parts = await this.prisma.part.findMany({
-      include: { unit: true, stocks: { include: { store: true, location: true } } },
+      include: {
+        unit: true,
+        supplier: true,
+        stocks: { include: { store: true, location: true, supplier: true } },
+      },
       orderBy: { name: 'asc' },
     });
 
@@ -83,7 +87,7 @@ export class MastersService {
         ...rawPartData,
         barcodeValue,
       },
-      include: { unit: true },
+      include: { unit: true, supplier: true },
     });
 
     // Create barcode master entry
@@ -114,18 +118,40 @@ export class MastersService {
           partId: part.id,
           storeId: store.id,
           quantityOnHand: initialQty,
+          supplierId: part.supplierId,
+          lastInwardAt: new Date(),
         },
       });
+
+      const firstUser = await this.prisma.user.findFirst();
+      if (firstUser) {
+        await this.prisma.stockMovement.create({
+          data: {
+            partId: part.id,
+            storeId: store.id,
+            movementType: 'ADJUSTMENT_ADD',
+            quantity: initialQty,
+            referenceType: 'MANUAL',
+            supplierId: part.supplierId,
+            reason: 'Initial Opening Stock Entry',
+            performedById: firstUser.id,
+          },
+        });
+      }
     }
 
     return this.prisma.part.findUnique({
       where: { id: part.id },
-      include: { unit: true, stocks: { include: { store: true, location: true } } },
+      include: {
+        unit: true,
+        supplier: true,
+        stocks: { include: { store: true, location: true, supplier: true } },
+      },
     });
   }
   async updatePart(id: string, data: any) {
     const { openingStock, ...partData } = data;
-    await this.prisma.part.update({ where: { id }, data: partData, include: { unit: true } });
+    await this.prisma.part.update({ where: { id }, data: partData, include: { unit: true, supplier: true } });
 
     if (openingStock !== undefined && !isNaN(Number(openingStock))) {
       const qty = Number(openingStock);
@@ -141,7 +167,11 @@ export class MastersService {
       if (existingStock) {
         await this.prisma.stock.update({
           where: { id: existingStock.id },
-          data: { quantityOnHand: qty },
+          data: {
+            quantityOnHand: qty,
+            ...(partData.supplierId ? { supplierId: partData.supplierId } : {}),
+            lastInwardAt: new Date(),
+          },
         });
       } else {
         await this.prisma.stock.create({
@@ -149,6 +179,8 @@ export class MastersService {
             partId: id,
             storeId: store.id,
             quantityOnHand: qty,
+            supplierId: partData.supplierId,
+            lastInwardAt: new Date(),
           },
         });
       }
@@ -156,7 +188,11 @@ export class MastersService {
 
     return this.prisma.part.findUnique({
       where: { id },
-      include: { unit: true, stocks: { include: { store: true, location: true } } },
+      include: {
+        unit: true,
+        supplier: true,
+        stocks: { include: { store: true, location: true, supplier: true } },
+      },
     });
   }
   async deletePart(id: string) {

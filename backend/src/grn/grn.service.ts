@@ -135,6 +135,8 @@ export class GrnService {
       });
 
       // 2. Post accepted quantities to Stock & StockMovement
+      const supplierId = grn.purchaseOrder.supplierId;
+
       for (const item of grn.items) {
         if (item.acceptedQty > 0) {
           // Update or create stock balance
@@ -150,7 +152,11 @@ export class GrnService {
           if (existingStock) {
             await tx.stock.update({
               where: { id: existingStock.id },
-              data: { quantityOnHand: existingStock.quantityOnHand + item.acceptedQty },
+              data: {
+                quantityOnHand: existingStock.quantityOnHand + item.acceptedQty,
+                supplierId: supplierId || existingStock.supplierId,
+                lastInwardAt: new Date(),
+              },
             });
           } else {
             await tx.stock.create({
@@ -160,6 +166,8 @@ export class GrnService {
                 locationId: item.locationId || null,
                 batchNumber: item.batchNumber || null,
                 quantityOnHand: item.acceptedQty,
+                supplierId,
+                lastInwardAt: new Date(),
               },
             });
           }
@@ -175,7 +183,8 @@ export class GrnService {
               referenceType: 'GRN',
               referenceId: grn.id,
               batchNumber: item.batchNumber,
-              reason: `Material inwarded via GRN #${grn.grnNumber}`,
+              supplierId,
+              reason: `Material inwarded via GRN #${grn.grnNumber} from ${grn.purchaseOrder.supplier?.name || 'Supplier'}`,
               performedById: userId,
             },
           });

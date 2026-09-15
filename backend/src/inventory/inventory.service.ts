@@ -17,9 +17,10 @@ export class InventoryService {
     return this.prisma.stock.findMany({
       where,
       include: {
-        part: { include: { unit: true } },
+        part: { include: { unit: true, supplier: true } },
         store: true,
         location: true,
+        supplier: true,
       },
       orderBy: { updatedAt: 'desc' },
     });
@@ -34,9 +35,10 @@ export class InventoryService {
       where,
       take: params?.limit || 100,
       include: {
-        part: { include: { unit: true } },
+        part: { include: { unit: true, supplier: true } },
         store: true,
         location: true,
+        supplier: true,
         performedBy: { select: { firstName: true, lastName: true, email: true } },
       },
       orderBy: { createdAt: 'desc' },
@@ -50,6 +52,7 @@ export class InventoryService {
     quantity: number; // positive to add, negative to deduct
     reason: string;
     batchNumber?: string;
+    supplierId?: string;
   }) {
     if (!data.quantity || data.quantity === 0) {
       throw new BadRequestException('Adjustment quantity must be non-zero');
@@ -68,6 +71,13 @@ export class InventoryService {
         },
       });
 
+      // Resolve supplier if not directly provided
+      let effectiveSupplierId = data.supplierId || null;
+      if (!effectiveSupplierId) {
+        const part = await tx.part.findUnique({ where: { id: data.partId } });
+        effectiveSupplierId = part?.supplierId || existingStock?.supplierId || null;
+      }
+
       const currentQty = existingStock?.quantityOnHand || 0;
       const newQty = currentQty + data.quantity;
 
@@ -77,10 +87,16 @@ export class InventoryService {
         );
       }
 
+      const isAddition = data.quantity > 0;
+
       if (existingStock) {
         await tx.stock.update({
           where: { id: existingStock.id },
-          data: { quantityOnHand: newQty },
+          data: {
+            quantityOnHand: newQty,
+            ...(isAddition && effectiveSupplierId ? { supplierId: effectiveSupplierId } : {}),
+            ...(isAddition ? { lastInwardAt: new Date() } : {}),
+          },
         });
       } else {
         await tx.stock.create({
@@ -90,6 +106,8 @@ export class InventoryService {
             locationId: data.locationId || null,
             batchNumber: data.batchNumber || null,
             quantityOnHand: newQty,
+            supplierId: effectiveSupplierId,
+            lastInwardAt: isAddition ? new Date() : null,
           },
         });
       }
@@ -103,6 +121,7 @@ export class InventoryService {
           quantity: Math.abs(data.quantity),
           referenceType: 'MANUAL',
           batchNumber: data.batchNumber,
+          supplierId: effectiveSupplierId,
           reason: data.reason,
           performedById: userId,
         },
