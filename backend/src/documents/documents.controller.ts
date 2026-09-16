@@ -48,7 +48,7 @@ export class DocumentsController {
   }
 
   @Delete(':id')
-  @RequirePermissions('documents.upload')
+  @RequirePermissions('documents.delete')
   delete(@Param('id') id: string) {
     return this.documentsService.delete(id);
   }

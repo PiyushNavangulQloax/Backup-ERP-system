@@ -13,6 +13,7 @@ import { ProductionPage } from './pages/ProductionPage';
 import { PackingPage } from './pages/PackingPage';
 import { BarcodePage } from './pages/BarcodePage';
 import { InvoicesPage } from './pages/InvoicesPage';
+import { SalesOrdersPage } from './pages/SalesOrdersPage';
 import { DispatchPage } from './pages/DispatchPage';
 import { MastersPage } from './pages/MastersPage';
 import { ReportsPage } from './pages/ReportsPage';
@@ -42,6 +43,7 @@ export const App: React.FC = () => {
               <Route path="/" element={<Navigate to="/dashboard" replace />} />
               <Route path="/dashboard" element={<DashboardPage />} />
               <Route path="/purchase-orders" element={<PurchaseOrdersPage />} />
+              <Route path="/sales-orders" element={<SalesOrdersPage />} />
               <Route path="/grns" element={<GrnPage />} />
               <Route path="/inventory" element={<InventoryPage />} />
               <Route path="/production" element={<ProductionPage />} />

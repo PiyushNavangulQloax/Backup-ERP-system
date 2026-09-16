@@ -235,8 +235,26 @@ export class ProductionService {
     locationId?: string;
     batchNumber?: string;
   }) {
-    const jobCard = await this.prisma.jobCard.findUnique({ where: { id } });
+    const jobCard = await this.prisma.jobCard.findUnique({
+      where: { id },
+      include: { plan: true, part: true },
+    });
     if (!jobCard) throw new NotFoundException('Job Card not found');
+
+    if (jobCard.status === 'COMPLETED') {
+      throw new BadRequestException(`Job Card #${jobCard.jobCardNumber} is already completed.`);
+    }
+
+    if (data.producedQty < 0 || data.rejectedQty < 0) {
+      throw new BadRequestException('Produced and rejected quantities cannot be negative.');
+    }
+
+    const totalOutput = data.producedQty + data.rejectedQty;
+    if (totalOutput > jobCard.targetQty) {
+      throw new BadRequestException(
+        `Total output (${totalOutput} units: ${data.producedQty} produced + ${data.rejectedQty} rejected) exceeds job target quantity of ${jobCard.targetQty} units.`,
+      );
+    }
 
     return this.prisma.$transaction(async (tx) => {
       const updatedJob = await tx.jobCard.update({
@@ -248,6 +266,21 @@ export class ProductionService {
           completedDate: new Date(),
         },
       });
+
+      // Update Production Plan progress if linked
+      if (jobCard.planId && data.producedQty > 0) {
+        const plan = await tx.productionPlan.findUnique({ where: { id: jobCard.planId } });
+        if (plan) {
+          const newCompleted = plan.completedQty + data.producedQty;
+          await tx.productionPlan.update({
+            where: { id: jobCard.planId },
+            data: {
+              completedQty: newCompleted,
+              status: newCompleted >= plan.plannedQty ? 'COMPLETED' : 'IN_PROGRESS',
+            },
+          });
+        }
+      }
 
       if (data.producedQty > 0) {
         // Deposit Finished Goods into Store

@@ -140,9 +140,13 @@ export class GatePassService {
   }
 
   async authorizeGateOut(dispatchId: string, userId: string) {
-    const gatePass = await this.findByDispatchId(dispatchId);
+    let gatePass = await this.findByDispatchId(dispatchId);
     if (!gatePass) {
-      throw new NotFoundException('Gate Pass not generated yet');
+      await this.getOrCreateGatePass(dispatchId);
+      gatePass = await this.findByDispatchId(dispatchId);
+    }
+    if (!gatePass) {
+      throw new NotFoundException('Failed to resolve Gate Pass record');
     }
 
     const dispatch = gatePass.dispatch;
@@ -179,39 +183,78 @@ export class GatePassService {
         },
       });
 
-      // 3. Update Boxes to DISPATCHED and deduct inventory
+      // 3. Update Boxes to DISPATCHED and deduct inventory with FG store validation
       for (const dBox of dispatch.boxes) {
+        for (const item of dBox.box.items) {
+          let stock = await tx.stock.findFirst({
+            where: {
+              partId: item.partId,
+              store: { type: 'FINISHED_GOODS' },
+              quantityOnHand: { gte: item.quantity },
+            },
+            include: { store: true },
+          });
+
+          if (!stock) {
+            stock = await tx.stock.findFirst({
+              where: {
+                partId: item.partId,
+                quantityOnHand: { gte: item.quantity },
+              },
+              orderBy: { quantityOnHand: 'desc' },
+              include: { store: true },
+            });
+          }
+
+          if (!stock || stock.quantityOnHand < item.quantity) {
+            const available = stock?.quantityOnHand || 0;
+            throw new BadRequestException(
+              `Insufficient finished-goods stock for part '${item.part?.name || item.partId}'. Available: ${available}, requested: ${item.quantity}. Gate-out blocked.`,
+            );
+          }
+
+          await tx.stock.update({
+            where: { id: stock.id },
+            data: { quantityOnHand: stock.quantityOnHand - item.quantity },
+          });
+
+          await tx.stockMovement.create({
+            data: {
+              partId: item.partId,
+              storeId: stock.storeId,
+              locationId: stock.locationId || null,
+              movementType: 'DISPATCH',
+              quantity: item.quantity,
+              referenceType: 'GATE_PASS',
+              referenceId: gatePass.gatePassNumber,
+              batchNumber: item.batchNumber || stock.batchNumber,
+              reason: `Gated out via ${gatePass.gatePassNumber} on vehicle ${dispatch.vehicleNumber || 'Logistics'} (Box ${dBox.box.boxNumber})`,
+              performedById: userId,
+            },
+          });
+        }
+
         await tx.box.update({
           where: { id: dBox.boxId },
           data: { status: 'DISPATCHED' },
         });
-
-        for (const item of dBox.box.items) {
-          const stock = await tx.stock.findFirst({
-            where: { partId: item.partId },
-          });
-
-          if (stock && stock.quantityOnHand >= item.quantity) {
-            await tx.stock.update({
-              where: { id: stock.id },
-              data: { quantityOnHand: stock.quantityOnHand - item.quantity },
-            });
-
-            await tx.stockMovement.create({
-              data: {
-                partId: item.partId,
-                storeId: stock.storeId,
-                movementType: 'DISPATCH',
-                quantity: item.quantity,
-                referenceType: 'GATE_PASS',
-                referenceId: gatePass.gatePassNumber,
-                reason: `Gated out via ${gatePass.gatePassNumber} on vehicle ${dispatch.vehicleNumber || 'MH-12-AB-5050'}`,
-                performedById: userId,
-              },
-            });
-          }
-        }
       }
+
+      // 4. Audit Log
+      await tx.auditLog.create({
+        data: {
+          userId,
+          action: 'GATE_OUT',
+          module: 'DISPATCH',
+          entityName: 'GatePass',
+          entityId: gatePass.id,
+          newData: JSON.stringify({
+            gatePassNumber: gatePass.gatePassNumber,
+            dispatchNumber: dispatch.dispatchNumber,
+            status: 'GATE_OUT',
+          }),
+        },
+      });
 
       return this.formatGatePassData(await this.findByDispatchId(dispatchId));
     });

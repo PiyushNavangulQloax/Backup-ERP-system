@@ -36,6 +36,9 @@ model User {
   sealedBoxes       Box[]               @relation("BoxSealedBy")
   createdInvoices   Invoice[]           @relation("InvoiceCreatedBy")
   dispatches        Dispatch[]          @relation("DispatchCreatedBy")
+  createdSalesOrders   SalesOrder[]    @relation("SOCreatedBy")
+  approvedSalesOrders  SalesOrder[]    @relation("SOApprovedBy")
+  createdPackingOrders PackingOrder[]  @relation("PackingOrderCreatedBy")
   scanHistories     BarcodeScanHistory[]
   auditLogs         AuditLog[]
   notifications     Notification[]
@@ -87,6 +90,7 @@ model Customer {
   updatedAt      DateTime   @updatedAt
   invoices       Invoice[]
   dispatches     Dispatch[]
+  salesOrders    SalesOrder[]
   customerParts  CustomerPart[]
 }
 
@@ -178,6 +182,8 @@ model Part {
   materialReturns MaterialReturn[]
   boxItems       BoxItem[]
   invoiceItems   InvoiceItem[]
+  salesOrderItems SalesOrderItem[]
+  packingOrderItems PackingOrderItem[]
   customerParts  CustomerPart[]
 }
 
@@ -538,6 +544,8 @@ model Box {
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
 
+  packingOrderId String?
+  packingOrder   PackingOrder? @relation("PackingOrderBoxes", fields: [packingOrderId], references: [id])
   items        BoxItem[]
   dispatchBoxes DispatchBox[]
 }
@@ -579,6 +587,80 @@ model BarcodeScanHistory {
 }
 
 // -----------------------------------------------------------------------------
+// Sales & Customer Orders
+// -----------------------------------------------------------------------------
+
+model SalesOrder {
+  id           String           @id @default(uuid())
+  orderNumber  String           @unique
+  customerId   String
+  customer     Customer         @relation(fields: [customerId], references: [id])
+  orderDate    DateTime         @default(now())
+  requiredDate DateTime?
+  status       String           @default("DRAFT") // DRAFT, SUBMITTED, APPROVED, PARTIALLY_FULFILLED, FULFILLED, CANCELLED
+  totalAmount  Float            @default(0)
+  taxAmount    Float            @default(0)
+  grandTotal   Float            @default(0)
+  remarks      String?
+  approvedById String?
+  approvedBy   User?            @relation("SOApprovedBy", fields: [approvedById], references: [id])
+  approvedAt   DateTime?
+  createdById  String
+  createdBy    User             @relation("SOCreatedBy", fields: [createdById], references: [id])
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  items         SalesOrderItem[]
+  packingOrders PackingOrder[]
+  invoices      Invoice[]
+}
+
+model SalesOrderItem {
+  id            String     @id @default(uuid())
+  salesOrderId  String
+  salesOrder    SalesOrder @relation(fields: [salesOrderId], references: [id], onDelete: Cascade)
+  partId        String
+  part          Part       @relation(fields: [partId], references: [id])
+  orderedQty    Float
+  rate          Float
+  taxRate       Float      @default(0)
+  lineTotal     Float
+  dispatchedQty Float      @default(0)
+  pendingQty    Float
+}
+
+// -----------------------------------------------------------------------------
+// Packing Orders
+// -----------------------------------------------------------------------------
+
+model PackingOrder {
+  id             String             @id @default(uuid())
+  orderNumber    String             @unique
+  salesOrderId   String?
+  salesOrder     SalesOrder?        @relation(fields: [salesOrderId], references: [id])
+  status         String             @default("DRAFT") // DRAFT, RELEASED, IN_PROGRESS, COMPLETED, CANCELLED
+  notes          String?
+  createdById    String
+  createdBy      User               @relation("PackingOrderCreatedBy", fields: [createdById], references: [id])
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  items          PackingOrderItem[]
+  boxes          Box[]              @relation("PackingOrderBoxes")
+}
+
+model PackingOrderItem {
+  id             String       @id @default(uuid())
+  packingOrderId String
+  packingOrder   PackingOrder @relation(fields: [packingOrderId], references: [id], onDelete: Cascade)
+  partId         String
+  part           Part         @relation(fields: [partId], references: [id])
+  requiredQty    Float
+  packedQty      Float        @default(0)
+  pendingQty     Float
+}
+
+// -----------------------------------------------------------------------------
 // Billing, Invoices & Dispatch
 // -----------------------------------------------------------------------------
 
@@ -587,6 +669,8 @@ model Invoice {
   invoiceNumber String        @unique
   customerId    String
   customer      Customer      @relation(fields: [customerId], references: [id])
+  salesOrderId  String?
+  salesOrder    SalesOrder?   @relation(fields: [salesOrderId], references: [id])
   invoiceDate   DateTime      @default(now())
   subTotal      Float         @default(0)
   taxAmount     Float         @default(0)

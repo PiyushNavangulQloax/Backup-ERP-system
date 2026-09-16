@@ -125,6 +125,10 @@ export class BarcodesService {
     try {
       const record = await this.findByCode(data.code);
 
+      if (record.status && record.status !== 'ACTIVE' && record.status !== 'OPEN') {
+        throw new BadRequestException(`Barcode ${data.code} cannot be processed (Status: ${record.status})`);
+      }
+
       if (data.scanAction === 'BOX_PACK') {
         if (record.entityType !== 'PART') {
           throw new BadRequestException('Only Part barcodes can be scanned into a box');
@@ -140,6 +144,19 @@ export class BarcodesService {
         }
 
         const qty = data.quantity || 1;
+
+        // Validate stock
+        const stockAgg = await this.prisma.stock.aggregate({
+          where: { partId: record.entity.id },
+          _sum: { quantityOnHand: true },
+        });
+        const available = stockAgg._sum.quantityOnHand || 0;
+        if (available < qty) {
+          throw new BadRequestException(
+            `Insufficient finished-goods stock for part '${record.entity.name}'. Available: ${available}, requested: ${qty}. Packing rejected.`,
+          );
+        }
+
         const boxItem = await this.prisma.boxItem.create({
           data: {
             boxId: data.targetBoxId,

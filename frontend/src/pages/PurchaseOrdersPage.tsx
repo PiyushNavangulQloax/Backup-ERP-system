@@ -5,6 +5,11 @@ import { useAuth } from '../context/AuthContext';
 import { useSearch } from '../context/SearchContext';
 import { WorkflowStepper } from '../components/WorkflowStepper';
 import { SearchableSelect } from '../components/SearchableSelect';
+import { PODetailsModal } from '../components/purchase/PODetailsModal';
+import {
+  InsufficientStockModal,
+  InsufficientItem,
+} from '../components/purchase/InsufficientStockModal';
 import {
   ShoppingCart,
   Plus,
@@ -17,15 +22,31 @@ import {
   FileText,
   AlertTriangle,
   Trash2,
-  PackageCheck,
+  Eye,
+  ShieldAlert,
+  AlertOctagon,
 } from 'lucide-react';
 
 export const PurchaseOrdersPage: React.FC = () => {
   const queryClient = useQueryClient();
-  const { hasPermission } = useAuth();
+  const { hasPermission, user } = useAuth();
   const { searchQuery, setSearchQuery } = useSearch();
+
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [statusFilter, setStatusFilter] = useState('');
+  const [selectedPoIdForDetails, setSelectedPoIdForDetails] = useState<string | null>(null);
+
+  // Rejection Dialog State
+  const [rejectingPo, setRejectingPo] = useState<{ id: string; poNumber: string } | null>(null);
+  const [rejectReason, setRejectReason] = useState('');
+
+  // Insufficient Stock Modal State
+  const [isInsufficientStockModalOpen, setIsInsufficientStockModalOpen] = useState(false);
+
+  const canReview =
+    hasPermission('po.approve') ||
+    user?.role === 'Administrator' ||
+    user?.role === 'Management';
 
   // Fetch POs
   const { data: pos, isLoading } = useQuery({
@@ -46,9 +67,10 @@ export const PurchaseOrdersPage: React.FC = () => {
       po.poNumber?.toLowerCase().includes(q) ||
       po.supplier?.name?.toLowerCase().includes(q) ||
       po.status?.toLowerCase().includes(q) ||
-      po.items?.some((it: any) =>
-        it.part?.name?.toLowerCase().includes(q) ||
-        it.part?.code?.toLowerCase().includes(q)
+      po.items?.some(
+        (it: any) =>
+          it.part?.name?.toLowerCase().includes(q) ||
+          it.part?.code?.toLowerCase().includes(q)
       )
     );
   });
@@ -69,9 +91,9 @@ export const PurchaseOrdersPage: React.FC = () => {
   const [selectedSupplier, setSelectedSupplier] = useState('');
   const [deliveryDate, setDeliveryDate] = useState('');
   const [notes, setNotes] = useState('');
-  const [items, setItems] = useState<Array<{ partId: string; orderedQty: number; unitPrice: number; taxRate: number }>>([
-    { partId: '', orderedQty: 100, unitPrice: 10, taxRate: 18 },
-  ]);
+  const [items, setItems] = useState<
+    Array<{ partId: string; orderedQty: number; unitPrice: number; taxRate: number }>
+  >([{ partId: '', orderedQty: 100, unitPrice: 10, taxRate: 18 }]);
 
   // Available stock helper
   const getPartInfo = (partId: string) => {
@@ -79,7 +101,8 @@ export const PurchaseOrdersPage: React.FC = () => {
     if (!part) return { part: null, stock: 0, uom: 'units' };
     const storeStock =
       part.stocks?.reduce(
-        (acc: number, s: any) => acc + (Number(s.quantityOnHand ?? s.quantity ?? 0)),
+        (acc: number, s: any) =>
+          acc + Number(s.quantityOnHand ?? s.quantity ?? 0),
         0
       ) || 0;
     const stock =
@@ -94,11 +117,41 @@ export const PurchaseOrdersPage: React.FC = () => {
     return { part, stock, uom };
   };
 
-  const hasInsufficientStockItem = items.some((it) => {
-    if (!it.partId) return false;
-    const { stock } = getPartInfo(it.partId);
-    return it.orderedQty > stock;
-  });
+  // Compute all items with insufficient stock
+  const getInsufficientItems = (): InsufficientItem[] => {
+    const list: InsufficientItem[] = [];
+    items.forEach((it, idx) => {
+      if (!it.partId) return;
+      const { part, stock, uom } = getPartInfo(it.partId);
+      if (it.orderedQty > stock) {
+        list.push({
+          index: idx,
+          partName: part?.name || 'Selected Part',
+          partCode: part?.code || 'N/A',
+          orderedQty: it.orderedQty,
+          availableStock: stock,
+          uom,
+        });
+      }
+    });
+    return list;
+  };
+
+  const insufficientItems = getInsufficientItems();
+  const hasInsufficientStockItem = insufficientItems.length > 0;
+
+  // 1-Click Auto Reduce Handler: sets orderedQty = availableStock for all shortages
+  const handleAutoReduceStock = () => {
+    const updated = items.map((it) => {
+      if (!it.partId) return it;
+      const { stock } = getPartInfo(it.partId);
+      if (it.orderedQty > stock) {
+        return { ...it, orderedQty: Math.max(stock, 0) };
+      }
+      return it;
+    });
+    setItems(updated);
+  };
 
   const createPOMutation = useMutation({
     mutationFn: async (payload: any) => {
@@ -112,6 +165,9 @@ export const PurchaseOrdersPage: React.FC = () => {
       setDeliveryDate('');
       setNotes('');
     },
+    onError: (err: any) => {
+      alert(err.response?.data?.message || 'Failed to create purchase order');
+    },
   });
 
   const approveMutation = useMutation({
@@ -120,6 +176,25 @@ export const PurchaseOrdersPage: React.FC = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['purchase-orders'] });
+      alert('Purchase order approved successfully!');
+    },
+    onError: (err: any) => {
+      alert(err.response?.data?.message || 'Approval failed');
+    },
+  });
+
+  const rejectMutation = useMutation({
+    mutationFn: async ({ id, reason }: { id: string; reason: string }) => {
+      return (await api.post(`/purchase-orders/${id}/reject`, { reason })).data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['purchase-orders'] });
+      setRejectingPo(null);
+      setRejectReason('');
+      alert('Purchase order rejected successfully.');
+    },
+    onError: (err: any) => {
+      alert(err.response?.data?.message || 'Rejection failed');
     },
   });
 
@@ -134,10 +209,18 @@ export const PurchaseOrdersPage: React.FC = () => {
 
   const handleCreateSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+
+    // STRICT CHECK: If insufficient stock exists, BLOCK SUBMISSION and pop up warning modal
+    if (hasInsufficientStockItem) {
+      setIsInsufficientStockModalOpen(true);
+      return;
+    }
+
     if (!selectedSupplier || items.some((i) => !i.partId)) {
       alert('Please fill out all fields and select a part for each line');
       return;
     }
+
     createPOMutation.mutate({
       supplierId: selectedSupplier,
       deliveryDate: deliveryDate || undefined,
@@ -160,14 +243,14 @@ export const PurchaseOrdersPage: React.FC = () => {
             <span>Purchase Orders</span>
           </h1>
           <p className="text-sm font-semibold text-slate-600 mt-1">
-            Supplier procurement orders, line item pricing, taxes and approvals
+            Supplier procurement orders, line item pricing, live stock checks and management review
           </p>
         </div>
 
         {hasPermission('po.create') && (
           <button
             onClick={() => setIsCreateOpen(true)}
-            className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-black text-sm shadow-md transition-all"
+            className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-black text-sm shadow-md transition-all cursor-pointer"
           >
             <Plus className="w-5 h-5 stroke-[2.5]" />
             <span>Create Purchase Order</span>
@@ -182,7 +265,7 @@ export const PurchaseOrdersPage: React.FC = () => {
             <button
               key={st}
               onClick={() => setStatusFilter(st)}
-              className={`px-4 py-2 rounded-xl text-xs font-black transition-all ${
+              className={`px-4 py-2 rounded-xl text-xs font-black transition-all cursor-pointer ${
                 statusFilter === st
                   ? 'bg-blue-600 text-white shadow-sm'
                   : 'bg-white text-slate-700 hover:bg-slate-200 border border-slate-300'
@@ -233,15 +316,22 @@ export const PurchaseOrdersPage: React.FC = () => {
             <tbody className="divide-y divide-slate-200">
               {isLoading ? (
                 <tr>
-                  <td colSpan={7} className="text-center py-12 text-slate-600 font-bold">Loading purchase orders...</td>
+                  <td colSpan={7} className="text-center py-12 text-slate-600 font-bold">
+                    Loading purchase orders...
+                  </td>
                 </tr>
               ) : filteredPos?.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="text-center py-12 text-slate-500 font-medium">
                     {searchQuery ? (
                       <span>
-                        No purchase orders matching &ldquo;<span className="font-bold text-slate-800">{searchQuery}</span>&rdquo;.{' '}
-                        <button onClick={() => setSearchQuery('')} className="text-blue-600 underline font-bold ml-1 hover:text-blue-800">
+                        No purchase orders matching &ldquo;
+                        <span className="font-bold text-slate-800">{searchQuery}</span>
+                        &rdquo;.{' '}
+                        <button
+                          onClick={() => setSearchQuery('')}
+                          className="text-blue-600 underline font-bold ml-1 hover:text-blue-800"
+                        >
                           Clear search
                         </button>
                       </span>
@@ -251,74 +341,228 @@ export const PurchaseOrdersPage: React.FC = () => {
                   </td>
                 </tr>
               ) : (
-                filteredPos?.map((po: any) => (
-                  <tr key={po.id} className="hover:bg-slate-50 transition-colors">
-                    <td className="py-4 px-5 font-mono font-black text-blue-700 text-base">{po.poNumber}</td>
-                    <td className="py-4 px-5">
-                      <div className="flex items-center gap-2 text-slate-900 font-bold text-sm">
-                        <Building className="w-4 h-4 text-slate-500" />
-                        <span>{po.supplier?.name}</span>
-                      </div>
-                    </td>
-                    <td className="py-4 px-5 text-slate-700 font-mono font-medium">
-                      {new Date(po.orderDate).toLocaleDateString()}
-                    </td>
-                    <td className="py-4 px-5 text-slate-800 font-semibold">
-                      {po.items?.length} items ({po.items?.reduce((acc: number, cur: any) => acc + cur.orderedQty, 0)} units)
-                    </td>
-                    <td className="py-4 px-5 font-mono font-black text-slate-900 text-base">
-                      ${po.grandTotal?.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                    </td>
-                    <td className="py-4 px-5">
-                      <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black tracking-wide border ${
-                        po.status === 'APPROVED' ? 'bg-emerald-100 text-emerald-800 border-emerald-300' :
-                        po.status === 'SUBMITTED' ? 'bg-amber-100 text-amber-800 border-amber-300' :
-                        po.status === 'COMPLETED' ? 'bg-blue-100 text-blue-800 border-blue-300' :
-                        po.status === 'REJECTED' ? 'bg-rose-100 text-rose-800 border-rose-300' :
-                        'bg-slate-100 text-slate-700 border-slate-300'
-                      }`}>
-                        {po.status === 'APPROVED' && <CheckCircle className="w-4 h-4 text-emerald-700" />}
-                        {po.status === 'SUBMITTED' && <Clock className="w-4 h-4 text-amber-700" />}
-                        {po.status === 'REJECTED' && <XCircle className="w-4 h-4 text-rose-700" />}
-                        <span>{po.status}</span>
-                      </span>
-                    </td>
-                    <td className="py-4 px-5 text-right">
-                      <div className="flex items-center justify-end gap-2">
+                filteredPos?.map((po: any) => {
+                  const isSubmitted = po.status === 'SUBMITTED';
+                  const isRejected = po.status === 'REJECTED';
+
+                  return (
+                    <tr key={po.id} className="hover:bg-slate-50 transition-colors">
+                      <td className="py-4 px-5 font-mono font-black text-blue-700 text-base">
                         <button
-                          onClick={() => downloadFile(`/purchase-orders/${po.id}/pdf`, `Purchase_Order_${po.poNumber}.pdf`)}
-                          className="px-2.5 py-1.5 rounded-lg border border-slate-300 hover:bg-slate-100 text-slate-700 font-semibold text-xs transition-all flex items-center gap-1.5 shadow-sm"
-                          title="Download PO PDF"
+                          onClick={() => setSelectedPoIdForDetails(po.id)}
+                          className="hover:underline text-left cursor-pointer"
+                          title="Click to view purchase order details"
                         >
-                          <FileText className="w-3.5 h-3.5 text-blue-600" />
-                          <span>PDF</span>
+                          {po.poNumber}
                         </button>
-                        {po.status === 'SUBMITTED' && hasPermission('po.approve') && (
-                          <button
-                            onClick={() => approveMutation.mutate(po.id)}
-                            className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs shadow-sm transition-all"
+                      </td>
+                      <td className="py-4 px-5">
+                        <div className="flex items-center gap-2 text-slate-900 font-bold text-sm">
+                          <Building className="w-4 h-4 text-slate-500" />
+                          <span>{po.supplier?.name}</span>
+                        </div>
+                      </td>
+                      <td className="py-4 px-5 text-slate-700 font-mono font-medium">
+                        {new Date(po.orderDate).toLocaleDateString()}
+                      </td>
+                      <td className="py-4 px-5 text-slate-800 font-semibold">
+                        {po.items?.length} items (
+                        {po.items?.reduce((acc: number, cur: any) => acc + cur.orderedQty, 0)}{' '}
+                        units)
+                      </td>
+                      <td className="py-4 px-5 font-mono font-black text-slate-900 text-base">
+                        ${po.grandTotal?.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                      </td>
+                      <td className="py-4 px-5">
+                        <div>
+                          <span
+                            className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black tracking-wide border ${
+                              po.status === 'APPROVED'
+                                ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                                : po.status === 'SUBMITTED'
+                                ? 'bg-amber-100 text-amber-800 border-amber-300'
+                                : po.status === 'COMPLETED'
+                                ? 'bg-blue-100 text-blue-800 border-blue-300'
+                                : po.status === 'REJECTED'
+                                ? 'bg-rose-100 text-rose-800 border-rose-300'
+                                : 'bg-slate-100 text-slate-700 border-slate-300'
+                            }`}
                           >
-                            Approve
+                            {po.status === 'APPROVED' && (
+                              <CheckCircle className="w-4 h-4 text-emerald-700" />
+                            )}
+                            {po.status === 'SUBMITTED' && (
+                              <Clock className="w-4 h-4 text-amber-700" />
+                            )}
+                            {po.status === 'REJECTED' && (
+                              <XCircle className="w-4 h-4 text-rose-700" />
+                            )}
+                            <span>{po.status}</span>
+                          </span>
+
+                          {isRejected && po.rejectionReason && (
+                            <div className="text-[11px] text-rose-700 font-medium mt-1 truncate max-w-xs">
+                              Reason: {po.rejectionReason}
+                            </div>
+                          )}
+                        </div>
+                      </td>
+                      <td className="py-4 px-5 text-right">
+                        <div className="flex items-center justify-end gap-1.5">
+                          {/* View Details Button */}
+                          <button
+                            onClick={() => setSelectedPoIdForDetails(po.id)}
+                            className="px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs transition-all flex items-center gap-1 cursor-pointer"
+                            title="Inspect purchase order details"
+                          >
+                            <Eye className="w-3.5 h-3.5 text-slate-600" />
+                            <span>Details</span>
                           </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))
+
+                          {/* PDF Download */}
+                          <button
+                            onClick={() =>
+                              downloadFile(
+                                `/purchase-orders/${po.id}/pdf`,
+                                `Purchase_Order_${po.poNumber}.pdf`
+                              )
+                            }
+                            className="px-2 py-1.5 rounded-lg border border-slate-300 hover:bg-slate-100 text-slate-700 font-semibold text-xs transition-all flex items-center gap-1 shadow-sm cursor-pointer"
+                            title="Download PO PDF"
+                          >
+                            <FileText className="w-3.5 h-3.5 text-blue-600" />
+                            <span>PDF</span>
+                          </button>
+
+                          {/* Quick Reviewer Actions (Management & Admin) */}
+                          {isSubmitted && canReview && (
+                            <>
+                              <button
+                                onClick={() => {
+                                  if (window.confirm(`Approve Purchase Order ${po.poNumber}?`)) {
+                                    approveMutation.mutate(po.id);
+                                  }
+                                }}
+                                disabled={approveMutation.isPending}
+                                className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs shadow-sm transition-all cursor-pointer"
+                                title="Approve Purchase Order"
+                              >
+                                Approve
+                              </button>
+
+                              <button
+                                onClick={() =>
+                                  setRejectingPo({ id: po.id, poNumber: po.poNumber })
+                                }
+                                className="px-3 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-300 font-black text-xs shadow-sm transition-all cursor-pointer"
+                                title="Reject Purchase Order"
+                              >
+                                Reject
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
         </div>
       </div>
 
-      {/* High-Contrast Crisp Create Modal */}
+      {/* Rejection Reason Modal */}
+      {rejectingPo && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white border border-slate-300 rounded-3xl w-full max-w-md p-6 shadow-2xl space-y-4">
+            <div className="flex items-center gap-3 text-rose-700">
+              <div className="p-2 bg-rose-100 rounded-xl">
+                <AlertOctagon className="w-5 h-5 stroke-[2.5]" />
+              </div>
+              <div>
+                <h3 className="text-base font-black text-slate-900">
+                  Reject {rejectingPo.poNumber}
+                </h3>
+                <p className="text-xs text-slate-500">Provide an audit reason for rejecting this PO</p>
+              </div>
+            </div>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (!rejectReason.trim()) {
+                  alert('Please provide a rejection reason');
+                  return;
+                }
+                rejectMutation.mutate({ id: rejectingPo.id, reason: rejectReason });
+              }}
+              className="space-y-4"
+            >
+              <div>
+                <label className="block text-xs font-black text-slate-700 uppercase tracking-wider mb-1.5">
+                  Rejection Reason *
+                </label>
+                <textarea
+                  required
+                  rows={3}
+                  value={rejectReason}
+                  onChange={(e) => setRejectReason(e.target.value)}
+                  placeholder="e.g. Budget exceeded, incorrect vendor, or redundant material..."
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl p-3 text-xs text-slate-900 font-medium focus:ring-2 focus:ring-rose-500 focus:outline-none"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2.5 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRejectingPo(null);
+                    setRejectReason('');
+                  }}
+                  className="px-4 py-2 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold text-xs transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={rejectMutation.isPending}
+                  className="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-black text-xs shadow-md transition-all cursor-pointer"
+                >
+                  {rejectMutation.isPending ? 'Rejecting...' : 'Confirm Rejection'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* PO Details Modal */}
+      {selectedPoIdForDetails && (
+        <PODetailsModal
+          poId={selectedPoIdForDetails}
+          onClose={() => setSelectedPoIdForDetails(null)}
+        />
+      )}
+
+      {/* Insufficient Stock Warning Modal */}
+      <InsufficientStockModal
+        isOpen={isInsufficientStockModalOpen}
+        items={insufficientItems}
+        onClose={() => setIsInsufficientStockModalOpen(false)}
+        onAutoReduce={handleAutoReduceStock}
+      />
+
+      {/* Create PO Modal */}
       {isCreateOpen && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white border border-slate-300 rounded-3xl w-full max-w-2xl max-h-[90vh] flex flex-col shadow-2xl">
             <div className="px-6 py-5 border-b border-slate-200 flex items-center justify-between bg-slate-50 rounded-t-3xl">
               <div>
                 <h2 className="text-xl font-black text-slate-900">Create Purchase Order</h2>
-                <p className="text-xs font-semibold text-slate-500 mt-0.5">Procure raw materials or components from verified vendors</p>
+                <p className="text-xs font-semibold text-slate-500 mt-0.5">
+                  Procure raw materials or components with real-time stock validation
+                </p>
               </div>
               <button
                 onClick={() => setIsCreateOpen(false)}
@@ -328,7 +572,10 @@ export const PurchaseOrdersPage: React.FC = () => {
               </button>
             </div>
 
-            <form onSubmit={handleCreateSubmit} className="p-6 overflow-y-auto space-y-5 flex-1 bg-white">
+            <form
+              onSubmit={handleCreateSubmit}
+              className="p-6 overflow-y-auto space-y-5 flex-1 bg-white"
+            >
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-black text-slate-800 uppercase tracking-wider mb-2">
@@ -341,7 +588,9 @@ export const PurchaseOrdersPage: React.FC = () => {
                       suppliers?.map((s: any) => ({
                         value: s.id,
                         label: `${s.name} (${s.code})`,
-                        sublabel: s.contactPerson ? `Contact: ${s.contactPerson} | Phone: ${s.phone || 'N/A'}` : undefined,
+                        sublabel: s.contactPerson
+                          ? `Contact: ${s.contactPerson} | Phone: ${s.phone || 'N/A'}`
+                          : undefined,
                         badge: s.gstin || s.city || undefined,
                       })) || []
                     }
@@ -369,13 +618,13 @@ export const PurchaseOrdersPage: React.FC = () => {
                       Order Items Breakdown
                     </label>
                     <span className="text-[11px] font-semibold text-slate-500">
-                      Real-time inventory stock checking is enabled for all users
+                      Real-time inventory stock checking is strictly enforced
                     </span>
                   </div>
                   <button
                     type="button"
                     onClick={handleAddItem}
-                    className="text-xs font-black text-blue-600 hover:text-blue-700 flex items-center gap-1.5 px-3 py-1.5 rounded-lg hover:bg-blue-50 transition-colors"
+                    className="text-xs font-black text-blue-600 hover:text-blue-700 flex items-center gap-1.5 px-3 py-1.5 rounded-lg hover:bg-blue-50 transition-colors cursor-pointer"
                   >
                     <Plus className="w-4 h-4 stroke-[2.5]" /> Add Item Row
                   </button>
@@ -391,7 +640,7 @@ export const PurchaseOrdersPage: React.FC = () => {
                         key={idx}
                         className={`p-3.5 rounded-2xl border transition-all ${
                           isExceeding
-                            ? 'bg-amber-50/80 border-amber-300 ring-1 ring-amber-300 shadow-sm'
+                            ? 'bg-rose-50/70 border-rose-300 ring-1 ring-rose-300 shadow-sm'
                             : 'bg-slate-50 border-slate-300'
                         }`}
                       >
@@ -426,14 +675,17 @@ export const PurchaseOrdersPage: React.FC = () => {
                                 parts?.map((p: any) => {
                                   const storeStock =
                                     p.stocks?.reduce(
-                                      (acc: number, s: any) => acc + (Number(s.quantityOnHand ?? s.quantity ?? 0)),
+                                      (acc: number, s: any) =>
+                                        acc +
+                                        Number(s.quantityOnHand ?? s.quantity ?? 0),
                                       0
                                     ) || 0;
                                   const pStock =
                                     storeStock > 0
                                       ? storeStock
                                       : Number(p.availableStock ?? p.minStockLevel ?? 0);
-                                  const uom = p.unit?.symbol || p.unit?.name || p.uom || 'units';
+                                  const uom =
+                                    p.unit?.symbol || p.unit?.name || p.uom || 'units';
                                   return {
                                     value: p.id,
                                     label: `${p.name} (${p.code})`,
@@ -462,7 +714,7 @@ export const PurchaseOrdersPage: React.FC = () => {
                               }}
                               className={`w-full bg-white border rounded-xl px-3 py-2 text-xs font-mono font-black text-slate-900 focus:outline-none focus:ring-2 shadow-sm ${
                                 isExceeding
-                                  ? 'border-amber-400 focus:ring-amber-500 bg-amber-50/50'
+                                  ? 'border-rose-400 focus:ring-rose-500 bg-rose-50/50'
                                   : 'border-slate-300 focus:ring-blue-600'
                               }`}
                             />
@@ -509,27 +761,41 @@ export const PurchaseOrdersPage: React.FC = () => {
                           </div>
                         </div>
 
-                        {/* Real-time Insufficient Stock Warning Alert Signal */}
+                        {/* Insufficient Stock Inline Banner */}
                         {isExceeding && (
-                          <div className="mt-3 p-3 rounded-xl bg-amber-100/90 border border-amber-300 flex items-start gap-2.5 text-amber-950 shadow-sm animate-pulse">
-                            <AlertTriangle className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
-                            <div className="text-xs leading-relaxed">
-                              <span className="font-black text-amber-900">
-                                ⚠️ Insufficient Stock Alert:{' '}
-                              </span>
-                              Required quantity (
-                              <span className="font-mono font-black text-amber-950">
-                                {it.orderedQty}
-                              </span>
-                              ) exceeds available stock (
-                              <span className="font-mono font-black text-amber-950">
-                                {stock} {uom}
-                              </span>
-                              ).
-                              <span className="block mt-0.5 font-bold text-amber-800">
-                                Notice: The order will be fulfilled based on the available stock quantity.
-                              </span>
+                          <div className="mt-3 p-3 rounded-xl bg-rose-100/90 border border-rose-300 flex items-start justify-between gap-3 text-rose-950 shadow-sm">
+                            <div className="flex items-start gap-2 text-xs leading-relaxed">
+                              <AlertOctagon className="w-4 h-4 text-rose-700 shrink-0 mt-0.5" />
+                              <div>
+                                <span className="font-black text-rose-900">
+                                  ⚠️ Insufficient Stock:{' '}
+                                </span>
+                                Requested quantity (
+                                <span className="font-mono font-black text-rose-950">
+                                  {it.orderedQty}
+                                </span>
+                                ) exceeds stock (
+                                <span className="font-mono font-black text-rose-950">
+                                  {stock} {uom}
+                                </span>
+                                ).
+                                <span className="block mt-0.5 font-bold text-rose-800">
+                                  Submission is blocked. Reduce quantity or replenish stock.
+                                </span>
+                              </div>
                             </div>
+
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const updated = [...items];
+                                updated[idx].orderedQty = stock;
+                                setItems(updated);
+                              }}
+                              className="px-2.5 py-1 rounded-lg bg-rose-200 hover:bg-rose-300 text-rose-900 font-black text-[10px] shrink-0 transition-colors"
+                            >
+                              Set to {stock}
+                            </button>
                           </div>
                         )}
                       </div>
@@ -553,11 +819,33 @@ export const PurchaseOrdersPage: React.FC = () => {
 
               {/* Overarching Notice if any item exceeds stock */}
               {hasInsufficientStockItem && (
-                <div className="p-3.5 rounded-xl bg-amber-50 border-2 border-amber-300 flex items-center gap-3 text-amber-950 shadow-sm">
-                  <AlertTriangle className="w-5 h-5 text-amber-700 shrink-0" />
-                  <div className="text-xs">
-                    <span className="font-black text-amber-900">Notice for all users: </span>
-                    One or more items exceed current available stock. This purchase order will be fulfilled based on the available stock quantity.
+                <div className="p-3.5 rounded-2xl bg-rose-50 border-2 border-rose-300 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-rose-950 shadow-sm">
+                  <div className="flex items-center gap-2.5 text-xs">
+                    <AlertOctagon className="w-5 h-5 text-rose-700 shrink-0" />
+                    <div>
+                      <span className="font-black text-rose-900">
+                        Insufficient stock detected ({insufficientItems.length} item
+                        {insufficientItems.length > 1 ? 's' : ''}):{' '}
+                      </span>
+                      Submission is disabled. Please reduce quantities to available stock or apply for stock replenishment.
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setIsInsufficientStockModalOpen(true)}
+                      className="px-3 py-1.5 rounded-xl bg-white border border-rose-300 text-rose-800 font-bold text-xs hover:bg-rose-100 transition-colors"
+                    >
+                      View Details
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleAutoReduceStock}
+                      className="px-3 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-black text-xs shadow transition-colors"
+                    >
+                      Fix All ({insufficientItems.length})
+                    </button>
                   </div>
                 </div>
               )}
@@ -570,13 +858,27 @@ export const PurchaseOrdersPage: React.FC = () => {
                 >
                   Cancel
                 </button>
-                <button
-                  type="submit"
-                  disabled={createPOMutation.isPending}
-                  className="px-6 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-black shadow-md transition-all"
-                >
-                  {createPOMutation.isPending ? 'Submitting...' : 'Submit Purchase Order'}
-                </button>
+
+                {/* Submit button: Disabled & clearly styled when insufficient stock exists */}
+                {hasInsufficientStockItem ? (
+                  <button
+                    type="button"
+                    onClick={() => setIsInsufficientStockModalOpen(true)}
+                    className="px-6 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-black shadow-md transition-all cursor-pointer flex items-center gap-2"
+                    title="Submission is blocked due to insufficient stock. Click to inspect or reduce."
+                  >
+                    <AlertOctagon className="w-4 h-4" />
+                    <span>Submission Blocked (Insufficient Stock)</span>
+                  </button>
+                ) : (
+                  <button
+                    type="submit"
+                    disabled={createPOMutation.isPending}
+                    className="px-6 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-black shadow-md transition-all cursor-pointer"
+                  >
+                    {createPOMutation.isPending ? 'Submitting...' : 'Submit Purchase Order'}
+                  </button>
+                )}
               </div>
             </form>
           </div>

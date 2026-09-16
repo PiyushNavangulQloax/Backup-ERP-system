@@ -28,13 +28,14 @@ export const Sidebar: React.FC = () => {
       items: [
         { name: 'Dashboard', path: '/dashboard', icon: LayoutDashboard, show: true },
         { name: 'Purchase Orders', path: '/purchase-orders', icon: ShoppingCart, show: hasPermission('po.view') },
+        { name: 'Sales Orders', path: '/sales-orders', icon: ShoppingCart, show: hasPermission('billing.view') || hasPermission('billing.manage') },
         { name: 'Inwarding (GRN)', path: '/grns', icon: PackageCheck, show: hasPermission('grn.view') },
         { name: 'Inventory & Ledger', path: '/inventory', icon: Boxes, show: hasPermission('inventory.view') },
         { name: 'Production & BOM', path: '/production', icon: Cpu, show: hasPermission('production.view') },
         { name: 'Packing & Boxes', path: '/packing', icon: Package, show: hasPermission('packing.view') },
         { name: 'Invoices & Billing', path: '/invoices', icon: Receipt, show: hasPermission('billing.view') },
         { name: 'Dispatch & Gate-Out', path: '/dispatch', icon: Truck, show: hasPermission('dispatch.view') },
-        { name: 'Documents & Drawings', path: '/documents', icon: FileText, show: true },
+        { name: 'Documents & Drawings', path: '/documents', icon: FileText, show: hasPermission('documents.view') },
       ],
     },
     {
@@ -48,8 +49,8 @@ export const Sidebar: React.FC = () => {
       items: [
         { name: 'Master Data', path: '/masters', icon: Database, show: hasPermission('masters.view') },
         { name: 'Reports & Exports', path: '/reports', icon: FileSpreadsheet, show: hasPermission('reports.view') },
-        { name: 'Users & Roles', path: '/users', icon: Users, show: user?.role === 'Administrator' },
-        { name: 'Audit Trail', path: '/audit-logs', icon: ShieldAlert, show: user?.role === 'Administrator' },
+        { name: 'Users & Roles', path: '/users', icon: Users, show: hasPermission('users.view') },
+        { name: 'Audit Trail', path: '/audit-logs', icon: ShieldAlert, show: hasPermission('audit.view') },
       ],
     },
   ];

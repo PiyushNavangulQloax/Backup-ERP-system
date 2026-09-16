@@ -83,6 +83,32 @@ export class GrnService {
       throw new BadRequestException('PO must be approved before receiving materials');
     }
 
+    // Validate quantities against PO limits
+    for (const item of data.items) {
+      if (item.receivedQty <= 0) {
+        throw new BadRequestException('Received quantity must be greater than 0');
+      }
+      const poItem = po.items.find((pi) => pi.id === item.poItemId);
+      if (!poItem) {
+        throw new BadRequestException(`Invalid PO item reference: ${item.poItemId}`);
+      }
+      const remainingQty = Math.max(0, poItem.orderedQty - poItem.receivedQty);
+      if (item.receivedQty > remainingQty) {
+        throw new BadRequestException(
+          `Received quantity (${item.receivedQty}) exceeds remaining PO quantity (${remainingQty}) for part.`,
+        );
+      }
+      const rejQty = item.rejectedQty || 0;
+      if (item.acceptedQty + rejQty > item.receivedQty) {
+        throw new BadRequestException(
+          `Sum of accepted (${item.acceptedQty}) and rejected (${rejQty}) quantities cannot exceed received quantity (${item.receivedQty}).`,
+        );
+      }
+      if (rejQty > 0 && !item.rejectionReason) {
+        throw new BadRequestException('A rejection reason is mandatory when rejected quantity is greater than 0.');
+      }
+    }
+
     const count = await this.prisma.gRN.count();
     const grnNumber = `GRN-${new Date().getFullYear()}-${String(count + 1).padStart(4, '0')}`;
 
@@ -125,11 +151,20 @@ export class GrnService {
     }
 
     return this.prisma.$transaction(async (tx) => {
-      // 1. Mark GRN verified
+      // 1. Calculate overall verification status
+      const hasAccepted = grn.items.some((i) => i.acceptedQty > 0);
+      const hasRejected = grn.items.some((i) => (i.rejectedQty || 0) > 0);
+      let newStatus = 'VERIFIED';
+      if (!hasAccepted && hasRejected) {
+        newStatus = 'REJECTED';
+      } else if (hasAccepted && hasRejected) {
+        newStatus = 'PARTIALLY_ACCEPTED';
+      }
+
       const updatedGrn = await tx.gRN.update({
         where: { id },
         data: {
-          status: 'VERIFIED',
+          status: newStatus,
           verifiedAt: new Date(),
         },
       });

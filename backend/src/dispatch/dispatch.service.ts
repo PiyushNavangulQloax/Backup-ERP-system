@@ -182,7 +182,11 @@ export class DispatchService {
   async gateOut(id: string, userId: string) {
     const dispatch = await this.findOne(id);
     if (dispatch.status === 'DISPATCHED') {
-      throw new BadRequestException('Dispatch is already completed');
+      throw new BadRequestException('Dispatch has already been gated out.');
+    }
+
+    if (dispatch.invoice && dispatch.invoice.status === 'CANCELLED') {
+      throw new BadRequestException('Cannot gate out dispatch for a cancelled invoice.');
     }
 
     // Check that all boxes have been scanned & verified
@@ -194,7 +198,68 @@ export class DispatchService {
     }
 
     return this.prisma.$transaction(async (tx) => {
-      // 1. Update dispatch status
+      // 1. Validate finished goods inventory availability for all items in all boxes
+      for (const dBox of dispatch.boxes) {
+        for (const item of dBox.box.items) {
+          // Look for finished goods store first, then any store with sufficient quantity
+          let stock = await tx.stock.findFirst({
+            where: {
+              partId: item.partId,
+              store: { type: 'FINISHED_GOODS' },
+              quantityOnHand: { gte: item.quantity },
+            },
+            include: { store: true },
+          });
+
+          if (!stock) {
+            stock = await tx.stock.findFirst({
+              where: {
+                partId: item.partId,
+                quantityOnHand: { gte: item.quantity },
+              },
+              orderBy: { quantityOnHand: 'desc' },
+              include: { store: true },
+            });
+          }
+
+          if (!stock || stock.quantityOnHand < item.quantity) {
+            const available = stock?.quantityOnHand || 0;
+            throw new BadRequestException(
+              `Insufficient finished-goods stock for part '${item.part?.name || item.partId}'. Available: ${available}, requested: ${item.quantity}. Gate-out blocked.`,
+            );
+          }
+
+          // Deduct stock
+          await tx.stock.update({
+            where: { id: stock.id },
+            data: { quantityOnHand: stock.quantityOnHand - item.quantity },
+          });
+
+          // Create traceable stock movement
+          await tx.stockMovement.create({
+            data: {
+              partId: item.partId,
+              storeId: stock.storeId,
+              locationId: stock.locationId || null,
+              movementType: 'DISPATCH',
+              quantity: item.quantity,
+              referenceType: 'DISPATCH',
+              referenceId: dispatch.dispatchNumber,
+              batchNumber: item.batchNumber || stock.batchNumber,
+              reason: `Dispatched via shipment #${dispatch.dispatchNumber} (Box ${dBox.box.boxNumber}) to customer ${dispatch.customer?.name || ''}`,
+              performedById: userId,
+            },
+          });
+        }
+
+        // Mark box as DISPATCHED
+        await tx.box.update({
+          where: { id: dBox.boxId },
+          data: { status: 'DISPATCHED' },
+        });
+      }
+
+      // 2. Update dispatch status
       const updated = await tx.dispatch.update({
         where: { id },
         data: {
@@ -203,40 +268,35 @@ export class DispatchService {
         },
       });
 
-      // 2. Mark all boxes as DISPATCHED & record stock deduction
-      for (const dBox of dispatch.boxes) {
-        await tx.box.update({
-          where: { id: dBox.boxId },
-          data: { status: 'DISPATCHED' },
+      // 3. Update Gate Pass if attached
+      const existingGatePass = await tx.gatePass.findUnique({
+        where: { dispatchId: id },
+      });
+      if (existingGatePass && existingGatePass.status !== 'GATE_OUT') {
+        await tx.gatePass.update({
+          where: { id: existingGatePass.id },
+          data: {
+            status: 'GATE_OUT',
+            exitTime: new Date(),
+          },
         });
-
-        // Deduct inventory items contained in the box
-        for (const item of dBox.box.items) {
-          const stock = await tx.stock.findFirst({
-            where: { partId: item.partId },
-          });
-
-          if (stock && stock.quantityOnHand >= item.quantity) {
-            await tx.stock.update({
-              where: { id: stock.id },
-              data: { quantityOnHand: stock.quantityOnHand - item.quantity },
-            });
-
-            await tx.stockMovement.create({
-              data: {
-                partId: item.partId,
-                storeId: stock.storeId,
-                movementType: 'DISPATCH',
-                quantity: item.quantity,
-                referenceType: 'DISPATCH',
-                referenceId: dispatch.id,
-                reason: `Dispatched via shipment #${dispatch.dispatchNumber}`,
-                performedById: userId,
-              },
-            });
-          }
-        }
       }
+
+      // 4. Audit Log
+      await tx.auditLog.create({
+        data: {
+          userId,
+          action: 'GATE_OUT',
+          module: 'DISPATCH',
+          entityName: 'Dispatch',
+          entityId: dispatch.id,
+          newData: JSON.stringify({
+            dispatchNumber: dispatch.dispatchNumber,
+            status: 'DISPATCHED',
+            boxCount: dispatch.boxes.length,
+          }),
+        },
+      });
 
       return updated;
     });
