@@ -90,25 +90,45 @@ export class PurchaseOrdersService {
     const count = await this.prisma.purchaseOrder.count();
     const poNumber = `PO-${new Date().getFullYear()}-${String(count + 1).padStart(4, '0')}`;
 
-    return this.prisma.purchaseOrder.create({
-      data: {
-        poNumber,
-        supplierId: data.supplierId,
-        deliveryDate: data.deliveryDate ? new Date(data.deliveryDate) : null,
-        notes: data.notes,
-        totalAmount: subTotal,
-        taxAmount: totalTax,
-        grandTotal: subTotal + totalTax,
-        createdById: userId,
-        status: 'SUBMITTED',
-        items: {
-          create: itemsData,
+    return this.prisma.$transaction(async (tx) => {
+      const po = await tx.purchaseOrder.create({
+        data: {
+          poNumber,
+          supplierId: data.supplierId,
+          deliveryDate: data.deliveryDate ? new Date(data.deliveryDate) : null,
+          notes: data.notes,
+          totalAmount: subTotal,
+          taxAmount: totalTax,
+          grandTotal: subTotal + totalTax,
+          createdById: userId,
+          status: 'SUBMITTED',
+          items: {
+            create: itemsData,
+          },
         },
-      },
-      include: {
-        supplier: true,
-        items: { include: { part: true } },
-      },
+        include: {
+          supplier: true,
+          items: { include: { part: true } },
+        },
+      });
+
+      await tx.auditLog.create({
+        data: {
+          userId,
+          action: 'CREATE',
+          module: 'PO',
+          entityName: 'PurchaseOrder',
+          entityId: po.id,
+          newData: JSON.stringify({
+            poNumber: po.poNumber,
+            supplierId: po.supplierId,
+            grandTotal: po.grandTotal,
+            status: po.status,
+          }),
+        },
+      });
+
+      return po;
     });
   }
 
@@ -118,13 +138,29 @@ export class PurchaseOrdersService {
       throw new BadRequestException(`Cannot approve PO in ${po.status} status`);
     }
 
-    return this.prisma.purchaseOrder.update({
-      where: { id },
-      data: {
-        status: 'APPROVED',
-        approvedById: userId,
-        approvedAt: new Date(),
-      },
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.purchaseOrder.update({
+        where: { id },
+        data: {
+          status: 'APPROVED',
+          approvedById: userId,
+          approvedAt: new Date(),
+        },
+      });
+
+      await tx.auditLog.create({
+        data: {
+          userId,
+          action: 'APPROVE',
+          module: 'PO',
+          entityName: 'PurchaseOrder',
+          entityId: id,
+          oldData: JSON.stringify({ status: po.status }),
+          newData: JSON.stringify({ status: 'APPROVED', approvedById: userId }),
+        },
+      });
+
+      return updated;
     });
   }
 
@@ -134,14 +170,33 @@ export class PurchaseOrdersService {
       throw new BadRequestException(`Cannot reject PO in ${po.status} status`);
     }
 
-    return this.prisma.purchaseOrder.update({
-      where: { id },
-      data: {
-        status: 'REJECTED',
-        approvedById: userId,
-        rejectionReason: reason?.trim() || 'Rejected by authorized reviewer',
-        approvedAt: new Date(),
-      },
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.purchaseOrder.update({
+        where: { id },
+        data: {
+          status: 'REJECTED',
+          approvedById: userId,
+          rejectionReason: reason?.trim() || 'Rejected by authorized reviewer',
+          approvedAt: new Date(),
+        },
+      });
+
+      await tx.auditLog.create({
+        data: {
+          userId,
+          action: 'REJECT',
+          module: 'PO',
+          entityName: 'PurchaseOrder',
+          entityId: id,
+          oldData: JSON.stringify({ status: po.status }),
+          newData: JSON.stringify({
+            status: 'REJECTED',
+            rejectionReason: updated.rejectionReason,
+          }),
+        },
+      });
+
+      return updated;
     });
   }
 

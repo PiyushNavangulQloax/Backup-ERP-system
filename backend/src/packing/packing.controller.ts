@@ -21,8 +21,11 @@ export class PackingController {
 
   @Get('boxes')
   @RequirePermissions('packing.view')
-  getBoxes(@Query('status') status?: string) {
-    return this.packingService.getBoxes({ status });
+  getBoxes(
+    @Query('status') status?: string,
+    @Query('packingOrderId') packingOrderId?: string,
+  ) {
+    return this.packingService.getBoxes({ status, packingOrderId });
   }
 
   @Get('boxes/:id')

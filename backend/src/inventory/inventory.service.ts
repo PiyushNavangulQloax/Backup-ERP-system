@@ -127,6 +127,23 @@ export class InventoryService {
         },
       });
 
+      await tx.auditLog.create({
+        data: {
+          userId,
+          action: 'ADJUST',
+          module: 'STOCK',
+          entityName: 'Stock',
+          entityId: existingStock?.id || movement.id,
+          oldData: JSON.stringify({ quantityOnHand: currentQty }),
+          newData: JSON.stringify({
+            quantityOnHand: newQty,
+            delta: data.quantity,
+            reason: data.reason,
+            movementType: movement.movementType,
+          }),
+        },
+      });
+
       return movement;
     });
   }
@@ -216,6 +233,22 @@ export class InventoryService {
           batchNumber: data.batchNumber,
           reason: `Internal transfer from source store`,
           performedById: userId,
+        },
+      });
+
+      await tx.auditLog.create({
+        data: {
+          userId,
+          action: 'TRANSFER',
+          module: 'STOCK',
+          entityName: 'Stock',
+          entityId: data.partId,
+          newData: JSON.stringify({
+            partId: data.partId,
+            sourceStoreId: data.sourceStoreId,
+            targetStoreId: data.targetStoreId,
+            quantity: data.quantity,
+          }),
         },
       });
 

@@ -141,29 +141,64 @@ export class InvoicesService {
 
     const grandTotal = subTotal + taxAmount;
 
-    return this.prisma.invoice.create({
-      data: {
-        invoiceNumber,
-        customerId: data.customerId,
-        salesOrderId: data.salesOrderId || null,
-        subTotal,
-        taxAmount,
-        grandTotal,
-        status: 'DRAFT',
-        createdById: userId,
-        items: {
-          create: itemsToCreate,
+    return this.prisma.$transaction(async (tx) => {
+      const invoice = await tx.invoice.create({
+        data: {
+          invoiceNumber,
+          customerId: data.customerId,
+          salesOrderId: data.salesOrderId || null,
+          subTotal,
+          taxAmount,
+          grandTotal,
+          status: 'DRAFT',
+          createdById: userId,
+          items: {
+            create: itemsToCreate,
+          },
         },
-      },
-      include: { customer: true, salesOrder: true, items: true },
+        include: { customer: true, salesOrder: true, items: true },
+      });
+
+      await tx.auditLog.create({
+        data: {
+          userId,
+          action: 'CREATE',
+          module: 'INVOICE',
+          entityName: 'Invoice',
+          entityId: invoice.id,
+          newData: JSON.stringify({
+            invoiceNumber: invoice.invoiceNumber,
+            customerId: invoice.customerId,
+            grandTotal: invoice.grandTotal,
+            status: invoice.status,
+          }),
+        },
+      });
+
+      return invoice;
     });
   }
 
-  async approve(id: string) {
-    return this.prisma.invoice.update({
-      where: { id },
-      data: { status: 'APPROVED' },
-      include: { customer: true },
+  async approve(id: string, userId?: string) {
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.invoice.update({
+        where: { id },
+        data: { status: 'APPROVED' },
+        include: { customer: true },
+      });
+
+      await tx.auditLog.create({
+        data: {
+          userId: userId || null,
+          action: 'APPROVE',
+          module: 'INVOICE',
+          entityName: 'Invoice',
+          entityId: id,
+          newData: JSON.stringify({ status: 'APPROVED' }),
+        },
+      });
+
+      return updated;
     });
   }
 
