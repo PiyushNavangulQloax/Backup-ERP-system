@@ -14,6 +14,7 @@ import { PackingPage } from './pages/PackingPage';
 import { BarcodePage } from './pages/BarcodePage';
 import { InvoicesPage } from './pages/InvoicesPage';
 import { SalesOrdersPage } from './pages/SalesOrdersPage';
+import { QualityPage } from './pages/QualityPage';
 import { DispatchPage } from './pages/DispatchPage';
 import { MastersPage } from './pages/MastersPage';
 import { ReportsPage } from './pages/ReportsPage';
@@ -64,6 +65,14 @@ export const App: React.FC = () => {
                 element={
                   <ProtectedRoute requiredPermission="grn.view">
                     <GrnPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/quality"
+                element={
+                  <ProtectedRoute requiredPermission="quality.view">
+                    <QualityPage />
                   </ProtectedRoute>
                 }
               />

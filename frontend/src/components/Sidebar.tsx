@@ -17,6 +17,7 @@ import {
   Users,
   Layers,
   FileText,
+  ShieldCheck,
 } from 'lucide-react';
 
 export const Sidebar: React.FC = () => {
@@ -30,6 +31,7 @@ export const Sidebar: React.FC = () => {
         { name: 'Purchase Orders', path: '/purchase-orders', icon: ShoppingCart, show: hasPermission('po.view') },
         { name: 'Sales Orders', path: '/sales-orders', icon: ShoppingCart, show: hasPermission('billing.view') || hasPermission('billing.manage') },
         { name: 'Inwarding (GRN)', path: '/grns', icon: PackageCheck, show: hasPermission('grn.view') },
+        { name: 'Quality Inspection', path: '/quality', icon: ShieldCheck, show: hasPermission('quality.view') },
         { name: 'Inventory & Ledger', path: '/inventory', icon: Boxes, show: hasPermission('inventory.view') },
         { name: 'Production & BOM', path: '/production', icon: Cpu, show: hasPermission('production.view') },
         { name: 'Packing & Boxes', path: '/packing', icon: Package, show: hasPermission('packing.view') },
