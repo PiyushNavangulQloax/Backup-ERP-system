@@ -63,4 +63,26 @@ export class PackingController {
   reopenBox(@Param('id') id: string) {
     return this.packingService.reopenBox(id);
   }
+
+  // Packing Orders
+  @Get('orders')
+  @RequirePermissions('packing.view')
+  getPackingOrders(
+    @Query('salesOrderId') salesOrderId?: string,
+    @Query('status') status?: string,
+  ) {
+    return this.packingService.getPackingOrders({ salesOrderId, status });
+  }
+
+  @Get('orders/:id')
+  @RequirePermissions('packing.view')
+  getPackingOrder(@Param('id') id: string) {
+    return this.packingService.getPackingOrder(id);
+  }
+
+  @Post('orders')
+  @RequirePermissions('packing.manage')
+  createPackingOrder(@Req() req: any, @Body() body: any) {
+    return this.packingService.createPackingOrder(req.user.id, body);
+  }
 }

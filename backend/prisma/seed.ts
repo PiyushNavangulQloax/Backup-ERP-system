@@ -67,6 +67,7 @@ async function main() {
     { code: 'audit.view', module: 'Audit', description: 'View system audit trails' },
     { code: 'documents.view', module: 'Documents', description: 'View documents and drawings' },
     { code: 'documents.upload', module: 'Documents', description: 'Upload documents' },
+    { code: 'documents.delete', module: 'Documents', description: 'Delete documents' },
   ];
 
   const permissionsMap = new Map<string, string>();

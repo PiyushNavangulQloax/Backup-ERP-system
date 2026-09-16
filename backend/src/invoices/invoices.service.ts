@@ -127,70 +127,30 @@ export class InvoicesService {
     }
 
     return this.prisma.$transaction(async (tx) => {
-      // 1. Mark status as PAID
+      // 1. Mark status as PAID (Financial confirmation only - physical stock is deducted exclusively at Gate-Out)
       const updated = await tx.invoice.update({
         where: { id },
         data: { status: 'PAID' },
         include: { customer: true, items: { include: { part: true } } },
       });
 
-      // 2. Automatically deduct stock for every product line in the order
-      for (const item of invoice.items) {
-        if (item.quantity <= 0) continue;
-
-        // Find existing stock in warehouse with positive balance, or any stock entry
-        let stock = await tx.stock.findFirst({
-          where: { partId: item.partId, quantityOnHand: { gt: 0 } },
-          orderBy: { quantityOnHand: 'desc' },
-        });
-
-        if (!stock) {
-          stock = await tx.stock.findFirst({
-            where: { partId: item.partId },
-          });
-        }
-
-        let storeId = stock?.storeId;
-        if (!storeId) {
-          const defaultStore = await tx.store.findFirst({ where: { isActive: true } });
-          storeId = defaultStore?.id;
-        }
-
-        if (storeId) {
-          const currentQty = stock?.quantityOnHand || 0;
-          const newQty = Math.max(0, currentQty - item.quantity);
-
-          if (stock) {
-            await tx.stock.update({
-              where: { id: stock.id },
-              data: { quantityOnHand: newQty },
-            });
-          } else {
-            await tx.stock.create({
-              data: {
-                partId: item.partId,
-                storeId: storeId,
-                quantityOnHand: 0,
-              },
-            });
-          }
-
-          // Record immutable stock movement ledger entry
-          await tx.stockMovement.create({
-            data: {
-              partId: item.partId,
-              storeId: storeId,
-              locationId: stock?.locationId || null,
-              movementType: 'DISPATCH',
-              quantity: item.quantity,
-              referenceType: 'INVOICE',
-              referenceId: invoice.invoiceNumber,
-              reason: `Customer order confirmed & payment received (${paymentData?.paymentMethod || 'Payment Complete'}). Customer: ${invoice.customer?.name}. Ref: ${paymentData?.transactionRef || 'PAID'}`,
-              performedById: userId,
-            },
-          });
-        }
-      }
+      // 2. Audit log entry for financial payment confirmation
+      await tx.auditLog.create({
+        data: {
+          userId,
+          action: 'PAYMENT_CONFIRM',
+          module: 'INVOICE',
+          entityName: 'Invoice',
+          entityId: invoice.id,
+          newData: JSON.stringify({
+            invoiceNumber: invoice.invoiceNumber,
+            status: 'PAID',
+            paymentMethod: paymentData?.paymentMethod || 'BANK_TRANSFER',
+            transactionRef: paymentData?.transactionRef || 'CONFIRMED',
+            notes: paymentData?.notes,
+          }),
+        },
+      });
 
       return updated;
     });

@@ -139,7 +139,7 @@ export class PurchaseOrdersService {
       data: {
         status: 'REJECTED',
         approvedById: userId,
-        rejectionReason: reason,
+        rejectionReason: reason?.trim() || 'Rejected by authorized reviewer',
         approvedAt: new Date(),
       },
     });
