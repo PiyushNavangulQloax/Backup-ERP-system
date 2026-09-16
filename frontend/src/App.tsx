@@ -20,6 +20,7 @@ import { ReportsPage } from './pages/ReportsPage';
 import { AuditPage } from './pages/AuditPage';
 import { UsersPage } from './pages/UsersPage';
 import { DocumentsPage } from './pages/DocumentsPage';
+import { ProtectedRoute } from './components/ProtectedRoute';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -42,20 +43,118 @@ export const App: React.FC = () => {
             <Route element={<AppLayout />}>
               <Route path="/" element={<Navigate to="/dashboard" replace />} />
               <Route path="/dashboard" element={<DashboardPage />} />
-              <Route path="/purchase-orders" element={<PurchaseOrdersPage />} />
-              <Route path="/sales-orders" element={<SalesOrdersPage />} />
-              <Route path="/grns" element={<GrnPage />} />
-              <Route path="/inventory" element={<InventoryPage />} />
-              <Route path="/production" element={<ProductionPage />} />
-              <Route path="/packing" element={<PackingPage />} />
-              <Route path="/barcodes" element={<BarcodePage />} />
-              <Route path="/invoices" element={<InvoicesPage />} />
-              <Route path="/dispatch" element={<DispatchPage />} />
-              <Route path="/documents" element={<DocumentsPage />} />
-              <Route path="/masters" element={<MastersPage />} />
-              <Route path="/reports" element={<ReportsPage />} />
-              <Route path="/audit-logs" element={<AuditPage />} />
-              <Route path="/users" element={<UsersPage />} />
+              <Route
+                path="/purchase-orders"
+                element={
+                  <ProtectedRoute requiredPermission="po.view">
+                    <PurchaseOrdersPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/sales-orders"
+                element={
+                  <ProtectedRoute requiredPermission="billing.view">
+                    <SalesOrdersPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/grns"
+                element={
+                  <ProtectedRoute requiredPermission="grn.view">
+                    <GrnPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/inventory"
+                element={
+                  <ProtectedRoute requiredPermission="inventory.view">
+                    <InventoryPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/production"
+                element={
+                  <ProtectedRoute requiredPermission="production.view">
+                    <ProductionPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/packing"
+                element={
+                  <ProtectedRoute requiredPermission="packing.view">
+                    <PackingPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/barcodes"
+                element={
+                  <ProtectedRoute requiredPermission="barcode.scan">
+                    <BarcodePage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/invoices"
+                element={
+                  <ProtectedRoute requiredPermission="billing.view">
+                    <InvoicesPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/dispatch"
+                element={
+                  <ProtectedRoute requiredPermission="dispatch.view">
+                    <DispatchPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/documents"
+                element={
+                  <ProtectedRoute requiredPermission="documents.view">
+                    <DocumentsPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/masters"
+                element={
+                  <ProtectedRoute requiredPermission="masters.view">
+                    <MastersPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/reports"
+                element={
+                  <ProtectedRoute requiredPermission="reports.view">
+                    <ReportsPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/audit-logs"
+                element={
+                  <ProtectedRoute requiredPermission="audit.view">
+                    <AuditPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/users"
+                element={
+                  <ProtectedRoute requiredPermission="users.view">
+                    <UsersPage />
+                  </ProtectedRoute>
+                }
+              />
             </Route>
 
             <Route path="*" element={<Navigate to="/dashboard" replace />} />

@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { useSearch } from '../context/SearchContext';
 import { WorkflowStepper } from '../components/WorkflowStepper';
 import { SearchableSelect } from '../components/SearchableSelect';
+import { NumberInput } from '../components/NumberInput';
 import {
   Receipt,
   Plus,
@@ -60,10 +61,38 @@ export const InvoicesPage: React.FC = () => {
     enabled: isCreateOpen,
   });
 
+  const { data: salesOrders } = useQuery({
+    queryKey: ['sales-orders', 'APPROVED'],
+    queryFn: async () => (await api.get('/sales-orders?status=APPROVED')).data,
+    enabled: isCreateOpen,
+  });
+
   const [selectedCustomerId, setSelectedCustomerId] = useState('');
+  const [selectedSalesOrderId, setSelectedSalesOrderId] = useState('');
   const [items, setItems] = useState<Array<{ partId: string; quantity: number; unitPrice: number; taxRate: number }>>([
     { partId: '', quantity: 20, unitPrice: 350, taxRate: 18 },
   ]);
+
+  const handleSelectSalesOrder = (soId: string) => {
+    setSelectedSalesOrderId(soId);
+    if (!soId) return;
+
+    const so = salesOrders?.find((s: any) => s.id === soId);
+    if (so) {
+      if (so.customerId) {
+        setSelectedCustomerId(so.customerId);
+      }
+      if (so.items && so.items.length > 0) {
+        const soItems = so.items.map((it: any) => ({
+          partId: it.partId,
+          quantity: it.pendingQty > 0 ? it.pendingQty : it.orderedQty,
+          unitPrice: it.rate || 100,
+          taxRate: it.taxRate ?? 18,
+        }));
+        setItems(soItems);
+      }
+    }
+  };
 
   // Available stock helper
   const getPartInfo = (partId: string) => {
@@ -100,6 +129,7 @@ export const InvoicesPage: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: ['invoices'] });
       setIsCreateOpen(false);
       setSelectedCustomerId('');
+      setSelectedSalesOrderId('');
       setItems([{ partId: '', quantity: 20, unitPrice: 350, taxRate: 18 }]);
     },
   });
@@ -141,6 +171,7 @@ export const InvoicesPage: React.FC = () => {
     if (!selectedCustomerId || items.some((i) => !i.partId)) return;
     createInvoiceMutation.mutate({
       customerId: selectedCustomerId,
+      salesOrderId: selectedSalesOrderId || undefined,
       items,
     });
   };
@@ -306,6 +337,29 @@ export const InvoicesPage: React.FC = () => {
 
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
+                <label className="block text-xs font-black text-slate-800 uppercase tracking-wider mb-1">
+                  Sales Order Reference (Optional)
+                </label>
+                <p className="text-[11px] font-semibold text-slate-500 mb-2">
+                  Link an APPROVED Sales Order to auto-populate customer & line items.
+                </p>
+                <SearchableSelect
+                  value={selectedSalesOrderId}
+                  onChange={handleSelectSalesOrder}
+                  options={[
+                    { value: '', label: '-- Direct Invoice (No Sales Order) --' },
+                    ...(salesOrders?.map((so: any) => ({
+                      value: so.id,
+                      label: `${so.orderNumber} • ${so.customer?.name || 'Customer'} ($${Number(so.grandTotal || 0).toLocaleString()})`,
+                      sublabel: `Status: ${so.status} | Items: ${so.items?.length || 0} line(s)`,
+                      badge: so.status,
+                    })) || []),
+                  ]}
+                  placeholder="-- Link to Approved Sales Order (Optional) --"
+                />
+              </div>
+
+              <div>
                 <label className="block text-xs font-black text-slate-800 uppercase tracking-wider mb-2">
                   Customer *
                 </label>
@@ -412,8 +466,7 @@ export const InvoicesPage: React.FC = () => {
                             <label className="block text-[10px] font-black text-slate-700 uppercase tracking-wider mb-1">
                               Quantity
                             </label>
-                            <input
-                              type="number"
+                            <NumberInput
                               min="1"
                               placeholder="Qty"
                               value={it.quantity}
@@ -434,8 +487,7 @@ export const InvoicesPage: React.FC = () => {
                             <label className="block text-[10px] font-black text-slate-700 uppercase tracking-wider mb-1">
                               Rate ($)
                             </label>
-                            <input
-                              type="number"
+                            <NumberInput
                               placeholder="Price"
                               value={it.unitPrice}
                               onChange={(e) => {

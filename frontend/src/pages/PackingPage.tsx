@@ -4,6 +4,7 @@ import { api } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { useSearch } from '../context/SearchContext';
 import { WorkflowStepper } from '../components/WorkflowStepper';
+import { NumberInput } from '../components/NumberInput';
 import {
   Package,
   Plus,
@@ -292,8 +293,7 @@ export const PackingPage: React.FC = () => {
                     ))}
                   </select>
                   <div className="flex gap-2">
-                    <input
-                      type="number"
+                    <NumberInput
                       min="1"
                       value={itemQty}
                       onChange={(e) => setItemQty(parseFloat(e.target.value) || 1)}

@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { useSearch } from '../context/SearchContext';
 import { WorkflowStepper } from '../components/WorkflowStepper';
 import { SearchableSelect } from '../components/SearchableSelect';
+import { NumberInput } from '../components/NumberInput';
 import {
   PackageCheck,
   Plus,
@@ -305,8 +306,7 @@ export const GrnPage: React.FC = () => {
                         <div className="grid grid-cols-4 gap-3">
                           <div>
                             <label className="block text-[10px] font-black text-slate-600 uppercase mb-1">Received</label>
-                            <input
-                              type="number"
+                            <NumberInput
                               min="0"
                               value={item.receivedQty}
                               onChange={(e) => {
@@ -321,8 +321,7 @@ export const GrnPage: React.FC = () => {
                           </div>
                           <div>
                             <label className="block text-[10px] font-black text-emerald-700 uppercase mb-1">Accepted</label>
-                            <input
-                              type="number"
+                            <NumberInput
                               min="0"
                               value={item.acceptedQty}
                               onChange={(e) => {
@@ -336,8 +335,7 @@ export const GrnPage: React.FC = () => {
                           </div>
                           <div>
                             <label className="block text-[10px] font-black text-rose-700 uppercase mb-1">Rejected</label>
-                            <input
-                              type="number"
+                            <NumberInput
                               min="0"
                               value={item.rejectedQty}
                               onChange={(e) => {

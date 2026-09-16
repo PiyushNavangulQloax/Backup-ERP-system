@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { useSearch } from '../context/SearchContext';
 import { WorkflowStepper } from '../components/WorkflowStepper';
 import { SearchableSelect } from '../components/SearchableSelect';
+import { NumberInput } from '../components/NumberInput';
 import { PODetailsModal } from '../components/purchase/PODetailsModal';
 import {
   InsufficientStockModal,
@@ -702,8 +703,7 @@ export const PurchaseOrdersPage: React.FC = () => {
                             <label className="block text-[10px] font-black text-slate-700 uppercase tracking-wider mb-1">
                               Ordered Qty
                             </label>
-                            <input
-                              type="number"
+                            <NumberInput
                               min="1"
                               required
                               value={it.orderedQty}
@@ -724,8 +724,7 @@ export const PurchaseOrdersPage: React.FC = () => {
                             <label className="block text-[10px] font-black text-slate-700 uppercase tracking-wider mb-1">
                               Rate ($)
                             </label>
-                            <input
-                              type="number"
+                            <NumberInput
                               step="0.01"
                               required
                               value={it.unitPrice}

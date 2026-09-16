@@ -141,8 +141,10 @@ export class SalesOrdersService {
 
   async approve(id: string, userId: string) {
     const order = await this.findOne(id);
-    if (order.status !== 'SUBMITTED' && order.status !== 'DRAFT') {
-      throw new BadRequestException(`Cannot approve order in ${order.status} state.`);
+    if (order.status !== 'SUBMITTED') {
+      throw new BadRequestException(
+        `Cannot approve order in ${order.status} status. Sales Order must be in SUBMITTED status before approval. Direct DRAFT approval is not permitted.`,
+      );
     }
 
     return this.prisma.salesOrder.update({

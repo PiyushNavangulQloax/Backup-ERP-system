@@ -358,6 +358,7 @@ model Stock {
   updatedAt      DateTime  @updatedAt
 
   @@unique([partId, storeId, locationId, batchNumber])
+  @@index([partId, storeId])
 }
 
 model StockMovement {
@@ -379,6 +380,9 @@ model StockMovement {
   performedById String
   performedBy   User      @relation("StockMovementUser", fields: [performedById], references: [id])
   createdAt     DateTime  @default(now())
+
+  @@index([partId, storeId])
+  @@index([createdAt])
 }
 
 // -----------------------------------------------------------------------------
@@ -584,6 +588,9 @@ model BarcodeScanHistory {
   scanAction   String   // BOX_PACK, BOX_VERIFY, DISPATCH_VERIFY, AUDIT
   isSuccess    Boolean  @default(true)
   errorMessage String?
+
+  @@index([barcodeCode])
+  @@index([scannedAt])
 }
 
 // -----------------------------------------------------------------------------
@@ -859,6 +866,9 @@ model AuditLog {
   newData    String?  // JSON string
   ipAddress  String?
   createdAt  DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([module, entityId])
 }
 
 model Notification {

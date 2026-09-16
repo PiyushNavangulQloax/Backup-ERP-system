@@ -164,6 +164,19 @@ export class GatePassService {
     return this.prisma.$transaction(async (tx) => {
       const exitTime = new Date();
 
+      // Atomic concurrency guard: Claim dispatch status transition inside transaction
+      const claimDispatch = await tx.dispatch.updateMany({
+        where: { id: dispatchId, status: { not: 'DISPATCHED' } },
+        data: {
+          status: 'DISPATCHED',
+          gateOutTime: exitTime,
+        },
+      });
+
+      if (claimDispatch.count === 0) {
+        throw new BadRequestException('Vehicle has already gated out or dispatch is not eligible.');
+      }
+
       // 1. Update Gate Pass
       await tx.gatePass.update({
         where: { id: gatePass.id },
@@ -174,19 +187,11 @@ export class GatePassService {
         },
       });
 
-      // 2. Update Dispatch
-      const updatedDispatch = await tx.dispatch.update({
-        where: { id: dispatchId },
-        data: {
-          status: 'DISPATCHED',
-          gateOutTime: exitTime,
-        },
-      });
-
       // 3. Update Boxes to DISPATCHED and deduct inventory with FG store validation
       for (const dBox of dispatch.boxes) {
         for (const item of dBox.box.items) {
-          let stock = await tx.stock.findFirst({
+          // Strictly search Finished Goods store only (no cross-store fallback to RM, WIP, or Scrap)
+          const stock = await tx.stock.findFirst({
             where: {
               partId: item.partId,
               store: { type: 'FINISHED_GOODS' },
@@ -195,21 +200,10 @@ export class GatePassService {
             include: { store: true },
           });
 
-          if (!stock) {
-            stock = await tx.stock.findFirst({
-              where: {
-                partId: item.partId,
-                quantityOnHand: { gte: item.quantity },
-              },
-              orderBy: { quantityOnHand: 'desc' },
-              include: { store: true },
-            });
-          }
-
           if (!stock || stock.quantityOnHand < item.quantity) {
             const available = stock?.quantityOnHand || 0;
             throw new BadRequestException(
-              `Insufficient finished-goods stock for part '${item.part?.name || item.partId}'. Available: ${available}, requested: ${item.quantity}. Gate-out blocked.`,
+              `Insufficient finished-goods stock for part '${item.part?.name || item.partId}'. Available in FINISHED_GOODS: ${available}, requested: ${item.quantity}. Gate-out blocked.`,
             );
           }
 
