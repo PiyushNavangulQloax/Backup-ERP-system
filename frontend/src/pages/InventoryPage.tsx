@@ -4,6 +4,7 @@ import { api } from '../services/api';
 import { useSearch } from '../context/SearchContext';
 import { WorkflowStepper } from '../components/WorkflowStepper';
 import { SearchableSelect } from '../components/SearchableSelect';
+import { NumberInput } from '../components/NumberInput';
 import {
   Boxes,
   Layers,
@@ -503,8 +504,7 @@ export const InventoryPage: React.FC = () => {
                     <label className="block text-xs font-black text-slate-800 uppercase tracking-wider mb-1.5">
                       Quantity of Boxes / Units to Add *
                     </label>
-                    <input
-                      type="number"
+                    <NumberInput
                       min="1"
                       placeholder="e.g. 10"
                       value={addStockForm.quantity}

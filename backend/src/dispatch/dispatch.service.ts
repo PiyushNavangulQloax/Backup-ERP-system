@@ -198,11 +198,24 @@ export class DispatchService {
     }
 
     return this.prisma.$transaction(async (tx) => {
+      // Atomic concurrency guard: Claim dispatch status transition inside transaction
+      const claimResult = await tx.dispatch.updateMany({
+        where: { id, status: { not: 'DISPATCHED' } },
+        data: {
+          status: 'DISPATCHED',
+          gateOutTime: new Date(),
+        },
+      });
+
+      if (claimResult.count === 0) {
+        throw new BadRequestException('Dispatch has already been gated out or is not eligible for gate-out.');
+      }
+
       // 1. Validate finished goods inventory availability for all items in all boxes
       for (const dBox of dispatch.boxes) {
         for (const item of dBox.box.items) {
-          // Look for finished goods store first, then any store with sufficient quantity
-          let stock = await tx.stock.findFirst({
+          // Strictly search Finished Goods store only (no cross-store fallback to RM, WIP, or Scrap)
+          const stock = await tx.stock.findFirst({
             where: {
               partId: item.partId,
               store: { type: 'FINISHED_GOODS' },
@@ -211,21 +224,10 @@ export class DispatchService {
             include: { store: true },
           });
 
-          if (!stock) {
-            stock = await tx.stock.findFirst({
-              where: {
-                partId: item.partId,
-                quantityOnHand: { gte: item.quantity },
-              },
-              orderBy: { quantityOnHand: 'desc' },
-              include: { store: true },
-            });
-          }
-
           if (!stock || stock.quantityOnHand < item.quantity) {
             const available = stock?.quantityOnHand || 0;
             throw new BadRequestException(
-              `Insufficient finished-goods stock for part '${item.part?.name || item.partId}'. Available: ${available}, requested: ${item.quantity}. Gate-out blocked.`,
+              `Insufficient finished-goods stock for part '${item.part?.name || item.partId}'. Available in FINISHED_GOODS: ${available}, requested: ${item.quantity}. Gate-out blocked.`,
             );
           }
 
@@ -259,13 +261,8 @@ export class DispatchService {
         });
       }
 
-      // 2. Update dispatch status
-      const updated = await tx.dispatch.update({
+      const updated = await tx.dispatch.findUnique({
         where: { id },
-        data: {
-          status: 'DISPATCHED',
-          gateOutTime: new Date(),
-        },
       });
 
       // 3. Update Gate Pass if attached

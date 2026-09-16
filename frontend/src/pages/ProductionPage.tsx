@@ -6,6 +6,7 @@ import { useAuth } from '../context/AuthContext';
 import { useSearch } from '../context/SearchContext';
 import { WorkflowStepper } from '../components/WorkflowStepper';
 import { SearchableSelect } from '../components/SearchableSelect';
+import { NumberInput } from '../components/NumberInput';
 import {
   Cpu,
   Layers,
@@ -419,8 +420,7 @@ export const ProductionPage: React.FC = () => {
                 <label className="block text-xs font-black text-slate-700 uppercase tracking-wider mb-1">
                   Target Production Quantity *
                 </label>
-                <input
-                  type="number"
+                <NumberInput
                   min="1"
                   value={jobForm.targetQty}
                   onChange={(e) => setJobForm({ ...jobForm, targetQty: Number(e.target.value) })}
@@ -522,8 +522,7 @@ export const ProductionPage: React.FC = () => {
                 <label className="block text-xs font-black text-slate-700 uppercase tracking-wider mb-1">
                   Quantity Required Per Unit *
                 </label>
-                <input
-                  type="number"
+                <NumberInput
                   step="0.01"
                   min="0.01"
                   value={bomForm.componentQty}
@@ -570,8 +569,7 @@ export const ProductionPage: React.FC = () => {
                 <label className="block text-xs font-black text-slate-700 uppercase tracking-wider mb-1">
                   Produced Quantity
                 </label>
-                <input
-                  type="number"
+                <NumberInput
                   value={producedQty}
                   onChange={(e) => setProducedQty(Number(e.target.value))}
                   className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2 text-xs font-bold text-slate-900"
@@ -583,8 +581,7 @@ export const ProductionPage: React.FC = () => {
                 <label className="block text-xs font-black text-slate-700 uppercase tracking-wider mb-1">
                   Rejected / Scrap Quantity
                 </label>
-                <input
-                  type="number"
+                <NumberInput
                   value={rejectedQty}
                   onChange={(e) => setRejectedQty(Number(e.target.value))}
                   className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2 text-xs font-bold text-slate-900"

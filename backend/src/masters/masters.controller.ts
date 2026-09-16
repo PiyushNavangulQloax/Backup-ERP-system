@@ -6,6 +6,7 @@ import {
   Delete,
   Body,
   Param,
+  Req,
   UseGuards,
 } from '@nestjs/common';
 import { MastersService } from './masters.service';
@@ -75,8 +76,8 @@ export class MastersController {
   }
   @Put('parts/:id')
   @RequirePermissions('masters.edit')
-  updatePart(@Param('id') id: string, @Body() body: any) {
-    return this.mastersService.updatePart(id, body);
+  updatePart(@Req() req: any, @Param('id') id: string, @Body() body: any) {
+    return this.mastersService.updatePart(id, body, req?.user?.id);
   }
   @Delete('parts/:id')
   @RequirePermissions('masters.delete')

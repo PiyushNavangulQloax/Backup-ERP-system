@@ -149,50 +149,84 @@ export class MastersService {
       },
     });
   }
-  async updatePart(id: string, data: any) {
+  async updatePart(id: string, data: any, userId?: string) {
     const { openingStock, ...partData } = data;
-    await this.prisma.part.update({ where: { id }, data: partData, include: { unit: true, supplier: true } });
 
-    if (openingStock !== undefined && !isNaN(Number(openingStock))) {
-      const qty = Number(openingStock);
-      let store = await this.prisma.store.findFirst({ where: { isActive: true } });
-      if (!store) {
-        store = await this.prisma.store.create({
-          data: { code: 'STR-MAIN', name: 'Main Central Store', type: 'RAW_MATERIALS' },
+    return this.prisma.$transaction(async (tx) => {
+      await tx.part.update({ where: { id }, data: partData, include: { unit: true, supplier: true } });
+
+      if (openingStock !== undefined && !isNaN(Number(openingStock))) {
+        const qty = Number(openingStock);
+        let store = await tx.store.findFirst({ where: { isActive: true } });
+        if (!store) {
+          store = await tx.store.create({
+            data: { code: 'STR-MAIN', name: 'Main Central Store', type: 'RAW_MATERIALS' },
+          });
+        }
+        const existingStock = await tx.stock.findFirst({
+          where: { partId: id, storeId: store.id },
         });
+
+        const currentQty = existingStock?.quantityOnHand || 0;
+        const diff = qty - currentQty;
+
+        if (existingStock) {
+          await tx.stock.update({
+            where: { id: existingStock.id },
+            data: {
+              quantityOnHand: qty,
+              ...(partData.supplierId ? { supplierId: partData.supplierId } : {}),
+              lastInwardAt: new Date(),
+            },
+          });
+        } else {
+          await tx.stock.create({
+            data: {
+              partId: id,
+              storeId: store.id,
+              quantityOnHand: qty,
+              supplierId: partData.supplierId,
+              lastInwardAt: new Date(),
+            },
+          });
+        }
+
+        // Ledger StockMovement only if there is an actual difference
+        if (diff !== 0) {
+          let effectiveUserId = userId;
+          if (!effectiveUserId) {
+            const firstUser = await tx.user.findFirst();
+            effectiveUserId = firstUser?.id;
+          }
+
+          if (effectiveUserId) {
+            await tx.stockMovement.create({
+              data: {
+                partId: id,
+                storeId: store.id,
+                movementType: diff > 0 ? 'ADJUSTMENT_ADD' : 'ADJUSTMENT_SUB',
+                quantity: Math.abs(diff),
+                referenceType: 'MANUAL',
+                supplierId: partData.supplierId || existingStock?.supplierId,
+                reason:
+                  diff > 0
+                    ? `Opening stock adjustment (+${diff})`
+                    : `Opening stock adjustment (-${Math.abs(diff)})`,
+                performedById: effectiveUserId,
+              },
+            });
+          }
+        }
       }
-      const existingStock = await this.prisma.stock.findFirst({
-        where: { partId: id, storeId: store.id },
+
+      return tx.part.findUnique({
+        where: { id },
+        include: {
+          unit: true,
+          supplier: true,
+          stocks: { include: { store: true, location: true, supplier: true } },
+        },
       });
-      if (existingStock) {
-        await this.prisma.stock.update({
-          where: { id: existingStock.id },
-          data: {
-            quantityOnHand: qty,
-            ...(partData.supplierId ? { supplierId: partData.supplierId } : {}),
-            lastInwardAt: new Date(),
-          },
-        });
-      } else {
-        await this.prisma.stock.create({
-          data: {
-            partId: id,
-            storeId: store.id,
-            quantityOnHand: qty,
-            supplierId: partData.supplierId,
-            lastInwardAt: new Date(),
-          },
-        });
-      }
-    }
-
-    return this.prisma.part.findUnique({
-      where: { id },
-      include: {
-        unit: true,
-        supplier: true,
-        stocks: { include: { store: true, location: true, supplier: true } },
-      },
     });
   }
   async deletePart(id: string) {

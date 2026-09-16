@@ -19,6 +19,7 @@ export class InvoicesService {
       where,
       include: {
         customer: true,
+        salesOrder: true,
         createdBy: { select: { firstName: true, lastName: true } },
         items: { include: { part: true } },
         dispatches: true,
@@ -32,6 +33,7 @@ export class InvoicesService {
       where: { id },
       include: {
         customer: true,
+        salesOrder: true,
         createdBy: { select: { firstName: true, lastName: true, email: true } },
         items: { include: { part: { include: { unit: true } } } },
         dispatches: {
@@ -48,6 +50,7 @@ export class InvoicesService {
 
   async create(userId: string, data: {
     customerId: string;
+    salesOrderId?: string;
     items: Array<{
       partId: string;
       quantity: number;
@@ -57,6 +60,61 @@ export class InvoicesService {
   }) {
     if (!data.items || data.items.length === 0) {
       throw new BadRequestException('At least one item is required for invoice');
+    }
+
+    // Validate Sales Order linkage if provided
+    let linkedSalesOrder: any = null;
+    if (data.salesOrderId) {
+      linkedSalesOrder = await this.prisma.salesOrder.findUnique({
+        where: { id: data.salesOrderId },
+        include: { items: true, invoices: { include: { items: true } } },
+      });
+
+      if (!linkedSalesOrder) {
+        throw new NotFoundException(`Sales Order with ID '${data.salesOrderId}' not found`);
+      }
+
+      if (linkedSalesOrder.status !== 'APPROVED') {
+        throw new BadRequestException(
+          `Cannot create invoice for Sales Order in '${linkedSalesOrder.status}' status. Only APPROVED Sales Orders can be invoiced.`,
+        );
+      }
+
+      if (linkedSalesOrder.customerId !== data.customerId) {
+        throw new BadRequestException(
+          `Invoice customer does not match the customer on Sales Order #${linkedSalesOrder.orderNumber}.`,
+        );
+      }
+
+      // Calculate previously invoiced quantities per part for this SO
+      const previouslyInvoiced: Record<string, number> = {};
+      for (const inv of linkedSalesOrder.invoices) {
+        if (inv.status !== 'CANCELLED') {
+          for (const invItem of inv.items) {
+            previouslyInvoiced[invItem.partId] =
+              (previouslyInvoiced[invItem.partId] || 0) + invItem.quantity;
+          }
+        }
+      }
+
+      // Validate each invoice item against Sales Order items and quantity limits
+      for (const item of data.items) {
+        const soItem = linkedSalesOrder.items.find((si: any) => si.partId === item.partId);
+        if (!soItem) {
+          throw new BadRequestException(
+            `Part ID '${item.partId}' is not authorized on Sales Order #${linkedSalesOrder.orderNumber}.`,
+          );
+        }
+
+        const priorQty = previouslyInvoiced[item.partId] || 0;
+        const remainingAuthorizedQty = Math.max(0, soItem.orderedQty - priorQty);
+
+        if (item.quantity > remainingAuthorizedQty) {
+          throw new BadRequestException(
+            `Invoice quantity (${item.quantity}) exceeds remaining authorized Sales Order quantity (${remainingAuthorizedQty}) for part '${item.partId}'.`,
+          );
+        }
+      }
     }
 
     const count = await this.prisma.invoice.count();
@@ -87,6 +145,7 @@ export class InvoicesService {
       data: {
         invoiceNumber,
         customerId: data.customerId,
+        salesOrderId: data.salesOrderId || null,
         subTotal,
         taxAmount,
         grandTotal,
@@ -96,7 +155,7 @@ export class InvoicesService {
           create: itemsToCreate,
         },
       },
-      include: { customer: true, items: true },
+      include: { customer: true, salesOrder: true, items: true },
     });
   }
 

@@ -23,6 +23,7 @@ import { useEffect } from 'react';
 import { useSearch } from '../context/SearchContext';
 import { WorkflowStepper } from '../components/WorkflowStepper';
 import { SearchableSelect } from '../components/SearchableSelect';
+import { NumberInput } from '../components/NumberInput';
 
 export const MastersPage: React.FC = () => {
   const navigate = useNavigate();
@@ -1322,8 +1323,7 @@ export const MastersPage: React.FC = () => {
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <div>
                     <label className="block text-xs font-black text-slate-700 mb-1">Standard Cost ($)</label>
-                    <input
-                      type="number"
+                    <NumberInput
                       step="0.01"
                       min="0"
                       value={partForm.standardCost}
@@ -1335,8 +1335,7 @@ export const MastersPage: React.FC = () => {
                     <label className="block text-xs font-black text-blue-950 mb-1">
                       Available / Opening Stock
                     </label>
-                    <input
-                      type="number"
+                    <NumberInput
                       min="0"
                       placeholder="e.g. 30"
                       value={partForm.openingStock}
@@ -1346,8 +1345,7 @@ export const MastersPage: React.FC = () => {
                   </div>
                   <div>
                     <label className="block text-xs font-black text-slate-700 mb-1">Min Stock Alert Level</label>
-                    <input
-                      type="number"
+                    <NumberInput
                       min="0"
                       value={partForm.minStockLevel}
                       onChange={(e) => setPartForm({ ...partForm, minStockLevel: parseFloat(e.target.value) || 0 })}

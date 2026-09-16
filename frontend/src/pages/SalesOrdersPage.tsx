@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../services/api';
 import { useAuth } from '../context/AuthContext';
+import { NumberInput } from '../components/NumberInput';
 import {
   ShoppingCart,
   Plus,
@@ -425,8 +426,7 @@ export const SalesOrdersPage: React.FC = () => {
                       </select>
                     </div>
                     <div className="col-span-2">
-                      <input
-                        type="number"
+                      <NumberInput
                         min="1"
                         placeholder="Qty"
                         value={item.orderedQty}
@@ -436,8 +436,7 @@ export const SalesOrdersPage: React.FC = () => {
                       />
                     </div>
                     <div className="col-span-2">
-                      <input
-                        type="number"
+                      <NumberInput
                         step="0.01"
                         placeholder="Rate ₹"
                         value={item.rate}
@@ -447,8 +446,7 @@ export const SalesOrdersPage: React.FC = () => {
                       />
                     </div>
                     <div className="col-span-2">
-                      <input
-                        type="number"
+                      <NumberInput
                         placeholder="GST %"
                         value={item.taxRate}
                         onChange={(e) => handleItemChange(index, 'taxRate', parseFloat(e.target.value) || 0)}
