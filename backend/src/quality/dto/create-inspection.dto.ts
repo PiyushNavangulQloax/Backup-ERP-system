@@ -23,9 +23,9 @@ export class CreateInspectionDto {
   @IsString()
   jobCardId?: string;
 
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  partId: string;
+  partId?: string;
 
   @IsOptional()
   @IsString()

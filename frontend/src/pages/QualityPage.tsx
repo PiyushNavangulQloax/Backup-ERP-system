@@ -87,12 +87,23 @@ export const QualityPage: React.FC = () => {
   // Handle Source selection in Create Modal
   const handleGrnSelect = (grnId: string) => {
     setSelectedGrnId(grnId);
-    setSelectedGrnItemId('');
-    setCreatePartId('');
-    setCreatePartName('');
-    setCreateBatch('');
-    setCreateMaxQty(0);
-    setCreateInspectedQty(0);
+    const grn = grns?.find((g: any) => g.id === grnId);
+    if (grn && grn.items && grn.items.length > 0) {
+      const firstItem = grn.items[0];
+      setSelectedGrnItemId(firstItem.id);
+      setCreatePartId(firstItem.partId);
+      setCreatePartName(`${firstItem.part?.partCode || ''} - ${firstItem.part?.name || ''}`);
+      setCreateBatch(firstItem.batchNumber || '');
+      setCreateMaxQty(firstItem.receivedQty || 0);
+      setCreateInspectedQty(firstItem.receivedQty || 0);
+    } else {
+      setSelectedGrnItemId('');
+      setCreatePartId('');
+      setCreatePartName('');
+      setCreateBatch('');
+      setCreateMaxQty(0);
+      setCreateInspectedQty(0);
+    }
   };
 
   const handleGrnItemSelect = (itemId: string) => {
@@ -131,7 +142,9 @@ export const QualityPage: React.FC = () => {
       resetCreateForm();
     },
     onError: (err: any) => {
-      setCreateError(err.response?.data?.message || err.message || 'Failed to create inspection');
+      const raw = err.response?.data?.message;
+      const msg = Array.isArray(raw) ? raw.join(', ') : (raw || err.message || 'Failed to create inspection');
+      setCreateError(msg);
     },
   });
 
@@ -142,7 +155,9 @@ export const QualityPage: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: ['quality-stats'] });
     },
     onError: (err: any) => {
-      alert(err.response?.data?.message || err.message || 'Failed to start inspection');
+      const raw = err.response?.data?.message;
+      const msg = Array.isArray(raw) ? raw.join(', ') : (raw || err.message || 'Failed to start inspection');
+      alert(msg);
     },
   });
 
@@ -156,7 +171,9 @@ export const QualityPage: React.FC = () => {
       setSelectedInspection(null);
     },
     onError: (err: any) => {
-      setCompleteError(err.response?.data?.message || err.message || 'Failed to complete inspection');
+      const raw = err.response?.data?.message;
+      const msg = Array.isArray(raw) ? raw.join(', ') : (raw || err.message || 'Failed to complete inspection');
+      setCompleteError(msg);
     },
   });
 
@@ -238,7 +255,7 @@ export const QualityPage: React.FC = () => {
       return;
     }
 
-    if (accepted + rejected !== total) {
+    if (Math.abs((accepted + rejected) - total) > 0.001) {
       setCompleteError(`Sum of accepted (${accepted}) and rejected (${rejected}) must equal inspected quantity (${total})`);
       return;
     }
@@ -855,7 +872,7 @@ export const QualityPage: React.FC = () => {
               {/* Tally Balance Indicator */}
               <div
                 className={`p-2.5 rounded-xl border text-xs font-bold flex items-center justify-between ${
-                  Number(completeAcceptedQty) + Number(completeRejectedQty) === selectedInspection.inspectedQty
+                  Math.abs((Number(completeAcceptedQty) + Number(completeRejectedQty)) - selectedInspection.inspectedQty) <= 0.001
                     ? 'bg-slate-50 border-slate-200 text-slate-700'
                     : 'bg-rose-50 border-rose-300 text-rose-700'
                 }`}
@@ -865,7 +882,7 @@ export const QualityPage: React.FC = () => {
                   {Number(completeAcceptedQty) + Number(completeRejectedQty)} / {selectedInspection.inspectedQty}
                 </span>
                 <span>
-                  {Number(completeAcceptedQty) + Number(completeRejectedQty) === selectedInspection.inspectedQty ? (
+                  {Math.abs((Number(completeAcceptedQty) + Number(completeRejectedQty)) - selectedInspection.inspectedQty) <= 0.001 ? (
                     <span className="text-emerald-600 font-extrabold flex items-center gap-1">
                       <Check className="w-3.5 h-3.5" /> Balanced
                     </span>
@@ -936,7 +953,7 @@ export const QualityPage: React.FC = () => {
                   type="submit"
                   disabled={
                     completeMutation.isPending ||
-                    Number(completeAcceptedQty) + Number(completeRejectedQty) !== selectedInspection.inspectedQty ||
+                    Math.abs((Number(completeAcceptedQty) + Number(completeRejectedQty)) - selectedInspection.inspectedQty) > 0.001 ||
                     (Number(completeRejectedQty) > 0 && !completeRejectionReason.trim())
                   }
                   className="px-5 py-2 text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-md transition-all active:scale-95 disabled:opacity-50"

@@ -70,26 +70,25 @@ export class QualityService {
   }
 
   async create(userId: string, data: CreateInspectionDto) {
+    // Normalize source type
+    const sourceType = String(data.sourceType || '').trim().toUpperCase() as 'INCOMING_GRN' | 'PRODUCTION_OUTPUT';
+    if (sourceType !== 'INCOMING_GRN' && sourceType !== 'PRODUCTION_OUTPUT') {
+      throw new BadRequestException(`Unsupported source type: ${data.sourceType}`);
+    }
+
     // RULE-Q01: inspectedQty > 0
     if (!data.inspectedQty || data.inspectedQty <= 0) {
       throw new BadRequestException('Inspected quantity must be greater than 0');
     }
 
-    // Part validation
-    const part = await this.prisma.part.findUnique({
-      where: { id: data.partId },
-    });
-    if (!part) {
-      throw new NotFoundException(`Part with ID ${data.partId} not found`);
-    }
-
     let grnId: string | null = null;
     let grnItemId: string | null = null;
     let jobCardId: string | null = null;
+    let resolvedPartId: string = data.partId || '';
     const sourceId = data.sourceId || data.grnId || data.jobCardId || null;
 
     // RULE-Q09: Source validation
-    if (data.sourceType === 'INCOMING_GRN') {
+    if (sourceType === 'INCOMING_GRN') {
       grnId = data.grnId || data.sourceId || null;
       if (!grnId) {
         throw new BadRequestException('GRN ID is required for INCOMING_GRN source type');
@@ -109,14 +108,19 @@ export class QualityService {
         if (!grnItem) {
           throw new NotFoundException(`GRN item with ID ${data.grnItemId} not found in GRN ${grnId}`);
         }
-      } else {
+      } else if (data.partId) {
         grnItem = grn.items.find((item) => item.partId === data.partId);
         if (!grnItem) {
           throw new BadRequestException(`No item found for Part ${data.partId} in GRN ${grnId}`);
         }
+      } else if (grn.items.length === 1) {
+        grnItem = grn.items[0];
+      } else {
+        throw new BadRequestException('Please specify a partId or grnItemId for the inspection');
       }
 
-      if (grnItem.partId !== data.partId) {
+      resolvedPartId = grnItem.partId;
+      if (data.partId && grnItem.partId !== data.partId) {
         throw new BadRequestException('Part ID does not match the GRN item part');
       }
 
@@ -128,12 +132,12 @@ export class QualityService {
       });
       const currentTotalInspected = existingInspections.reduce((sum, i) => sum + i.inspectedQty, 0);
 
-      if (currentTotalInspected + data.inspectedQty > grnItem.receivedQty) {
+      if (currentTotalInspected + data.inspectedQty > grnItem.receivedQty + 0.0001) {
         throw new BadRequestException(
           `Total inspected quantity (${currentTotalInspected + data.inspectedQty}) exceeds GRN item received quantity (${grnItem.receivedQty})`,
         );
       }
-    } else if (data.sourceType === 'PRODUCTION_OUTPUT') {
+    } else if (sourceType === 'PRODUCTION_OUTPUT') {
       jobCardId = data.jobCardId || data.sourceId || null;
       if (!jobCardId) {
         throw new BadRequestException('Job card ID is required for PRODUCTION_OUTPUT source type');
@@ -146,7 +150,8 @@ export class QualityService {
         throw new NotFoundException(`Job card with ID ${jobCardId} not found`);
       }
 
-      if (jobCard.partId !== data.partId) {
+      resolvedPartId = resolvedPartId || jobCard.partId;
+      if (data.partId && jobCard.partId !== data.partId) {
         throw new BadRequestException('Part ID does not match the Job card part');
       }
 
@@ -156,31 +161,41 @@ export class QualityService {
       });
       const currentTotalInspected = existingInspections.reduce((sum, i) => sum + i.inspectedQty, 0);
 
-      if (currentTotalInspected + data.inspectedQty > maxAllowed) {
+      if (currentTotalInspected + data.inspectedQty > maxAllowed + 0.0001) {
         throw new BadRequestException(
           `Total inspected quantity (${currentTotalInspected + data.inspectedQty}) exceeds Job card quantity (${maxAllowed})`,
         );
       }
-    } else {
-      throw new BadRequestException(`Unsupported source type: ${data.sourceType}`);
     }
 
-    // Generate unique inspection number
+    // Part validation
+    const part = await this.prisma.part.findUnique({
+      where: { id: resolvedPartId },
+    });
+    if (!part) {
+      throw new NotFoundException(`Part with ID ${resolvedPartId} not found`);
+    }
+
+    // Generate unique inspection number safely with collision loop
     const today = new Date();
     const dateStr = today.toISOString().slice(0, 10).replace(/-/g, '');
-    const count = await this.prisma.qualityInspection.count();
-    const inspectionNumber = `QI-${dateStr}-${String(count + 1).padStart(4, '0')}`;
+    let seq = (await this.prisma.qualityInspection.count()) + 1;
+    let inspectionNumber = `QI-${dateStr}-${String(seq).padStart(4, '0')}`;
+    while (await this.prisma.qualityInspection.findUnique({ where: { inspectionNumber } })) {
+      seq++;
+      inspectionNumber = `QI-${dateStr}-${String(seq).padStart(4, '0')}`;
+    }
 
     return this.prisma.$transaction(async (tx) => {
       const inspection = await tx.qualityInspection.create({
         data: {
           inspectionNumber,
-          sourceType: data.sourceType,
+          sourceType,
           sourceId: sourceId || grnId || jobCardId,
           grnId,
           grnItemId,
           jobCardId,
-          partId: data.partId,
+          partId: resolvedPartId,
           batchNumber: data.batchNumber || null,
           inspectedQty: data.inspectedQty,
           acceptedQty: 0,
@@ -238,7 +253,14 @@ export class QualityService {
           grn: true,
           grnItem: true,
           jobCard: true,
-          inspectedBy: true,
+          inspectedBy: {
+            select: {
+              id: true,
+              email: true,
+              firstName: true,
+              lastName: true,
+            },
+          },
         },
       });
 
@@ -276,8 +298,8 @@ export class QualityService {
       throw new BadRequestException('Rejected quantity cannot be negative');
     }
 
-    // RULE-Q04: acceptedQty + rejectedQty must equal inspectedQty
-    if (acceptedQty + rejectedQty !== inspection.inspectedQty) {
+    // RULE-Q04: acceptedQty + rejectedQty must equal inspectedQty (with float tolerance)
+    if (Math.abs(acceptedQty + rejectedQty - inspection.inspectedQty) > 0.0001) {
       throw new BadRequestException(
         `Sum of accepted (${acceptedQty}) and rejected (${rejectedQty}) quantities must equal inspected quantity (${inspection.inspectedQty})`,
       );

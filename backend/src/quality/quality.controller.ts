@@ -20,7 +20,7 @@ import { RequirePermissions } from '../auth/decorators/permissions.decorator';
 export class QualityController {
   constructor(private readonly qualityService: QualityService) {}
 
-  @Get('inspections')
+  @Get(['', 'inspections'])
   @RequirePermissions('quality.view')
   findAll(
     @Query('status') status?: string,
@@ -31,31 +31,31 @@ export class QualityController {
     return this.qualityService.findAll({ status, decision, sourceType, partId });
   }
 
-  @Get('inspections/stats')
+  @Get(['stats', 'inspections/stats'])
   @RequirePermissions('quality.view')
   getStatistics() {
     return this.qualityService.getStatistics();
   }
 
-  @Get('inspections/:id')
+  @Get([':id', 'inspections/:id'])
   @RequirePermissions('quality.view')
   findOne(@Param('id') id: string) {
     return this.qualityService.findOne(id);
   }
 
-  @Post('inspections')
+  @Post(['', 'inspections'])
   @RequirePermissions('quality.manage')
   create(@Req() req: any, @Body() body: CreateInspectionDto) {
     return this.qualityService.create(req.user.id, body);
   }
 
-  @Post('inspections/:id/start')
+  @Post([':id/start', 'inspections/:id/start'])
   @RequirePermissions('quality.manage')
   start(@Req() req: any, @Param('id') id: string) {
     return this.qualityService.start(id, req.user.id);
   }
 
-  @Post('inspections/:id/complete')
+  @Post([':id/complete', 'inspections/:id/complete'])
   @RequirePermissions('quality.approve')
   complete(
     @Req() req: any,
