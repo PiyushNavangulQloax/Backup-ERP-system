@@ -43,8 +43,8 @@ export class InvoicesController {
 
   @Post(':id/approve')
   @RequirePermissions('billing.approve')
-  approve(@Param('id') id: string) {
-    return this.invoicesService.approve(id);
+  approve(@Param('id') id: string, @Req() req: any) {
+    return this.invoicesService.approve(id, req?.user?.id);
   }
 
   @Post(':id/confirm')

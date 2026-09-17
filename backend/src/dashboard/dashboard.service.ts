@@ -15,6 +15,7 @@ export class DashboardService {
       pendingDispatches,
       recentScans,
       lowStockCount,
+      pendingInspections,
       invoices,
     ] = await Promise.all([
       this.prisma.purchaseOrder.count({ where: { status: 'SUBMITTED' } }),
@@ -35,6 +36,11 @@ export class DashboardService {
               quantityOnHand: { lte: 100 },
             },
           },
+        },
+      }),
+      this.prisma.qualityInspection.count({
+        where: {
+          status: { in: ['PENDING', 'IN_PROGRESS'] },
         },
       }),
       this.prisma.invoice.findMany({
@@ -206,6 +212,7 @@ export class DashboardService {
         pendingDispatches,
         recentScans24h: recentScans,
         lowStockAlerts: lowStockCount,
+        pendingInspections,
       },
       revenue,
       recentMovements,

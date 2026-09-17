@@ -104,25 +104,45 @@ export class SalesOrdersService {
 
     const grandTotal = totalAmount + taxAmount;
 
-    return this.prisma.salesOrder.create({
-      data: {
-        orderNumber,
-        customerId: data.customerId,
-        requiredDate: data.requiredDate ? new Date(data.requiredDate) : null,
-        remarks: data.remarks,
-        totalAmount,
-        taxAmount,
-        grandTotal,
-        status: 'DRAFT',
-        createdById: userId,
-        items: {
-          create: itemsToCreate,
+    return this.prisma.$transaction(async (tx) => {
+      const order = await tx.salesOrder.create({
+        data: {
+          orderNumber,
+          customerId: data.customerId,
+          requiredDate: data.requiredDate ? new Date(data.requiredDate) : null,
+          remarks: data.remarks,
+          totalAmount,
+          taxAmount,
+          grandTotal,
+          status: 'DRAFT',
+          createdById: userId,
+          items: {
+            create: itemsToCreate,
+          },
         },
-      },
-      include: {
-        customer: true,
-        items: { include: { part: true } },
-      },
+        include: {
+          customer: true,
+          items: { include: { part: true } },
+        },
+      });
+
+      await tx.auditLog.create({
+        data: {
+          userId,
+          action: 'CREATE',
+          module: 'SALES',
+          entityName: 'SalesOrder',
+          entityId: order.id,
+          newData: JSON.stringify({
+            orderNumber: order.orderNumber,
+            customerId: order.customerId,
+            grandTotal: order.grandTotal,
+            status: order.status,
+          }),
+        },
+      });
+
+      return order;
     });
   }
 
@@ -132,10 +152,25 @@ export class SalesOrdersService {
       throw new BadRequestException(`Cannot submit order in ${order.status} state. Only DRAFT orders can be submitted.`);
     }
 
-    return this.prisma.salesOrder.update({
-      where: { id },
-      data: { status: 'SUBMITTED' },
-      include: { customer: true, items: true },
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.salesOrder.update({
+        where: { id },
+        data: { status: 'SUBMITTED' },
+        include: { customer: true, items: true },
+      });
+
+      await tx.auditLog.create({
+        data: {
+          action: 'SUBMIT',
+          module: 'SALES',
+          entityName: 'SalesOrder',
+          entityId: id,
+          oldData: JSON.stringify({ status: order.status }),
+          newData: JSON.stringify({ status: 'SUBMITTED' }),
+        },
+      });
+
+      return updated;
     });
   }
 
@@ -147,14 +182,30 @@ export class SalesOrdersService {
       );
     }
 
-    return this.prisma.salesOrder.update({
-      where: { id },
-      data: {
-        status: 'APPROVED',
-        approvedById: userId,
-        approvedAt: new Date(),
-      },
-      include: { customer: true, items: true },
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.salesOrder.update({
+        where: { id },
+        data: {
+          status: 'APPROVED',
+          approvedById: userId,
+          approvedAt: new Date(),
+        },
+        include: { customer: true, items: true },
+      });
+
+      await tx.auditLog.create({
+        data: {
+          userId,
+          action: 'APPROVE',
+          module: 'SALES',
+          entityName: 'SalesOrder',
+          entityId: id,
+          oldData: JSON.stringify({ status: order.status }),
+          newData: JSON.stringify({ status: 'APPROVED', approvedById: userId }),
+        },
+      });
+
+      return updated;
     });
   }
 
@@ -164,12 +215,28 @@ export class SalesOrdersService {
       throw new BadRequestException(`Cannot reject order in ${order.status} state.`);
     }
 
-    return this.prisma.salesOrder.update({
-      where: { id },
-      data: {
-        status: 'CANCELLED',
-        remarks: reason ? `${order.remarks || ''} [Rejected: ${reason}]`.trim() : order.remarks,
-      },
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.salesOrder.update({
+        where: { id },
+        data: {
+          status: 'CANCELLED',
+          remarks: reason ? `${order.remarks || ''} [Rejected: ${reason}]`.trim() : order.remarks,
+        },
+      });
+
+      await tx.auditLog.create({
+        data: {
+          userId,
+          action: 'CANCEL',
+          module: 'SALES',
+          entityName: 'SalesOrder',
+          entityId: id,
+          oldData: JSON.stringify({ status: order.status }),
+          newData: JSON.stringify({ status: 'CANCELLED', reason }),
+        },
+      });
+
+      return updated;
     });
   }
 }

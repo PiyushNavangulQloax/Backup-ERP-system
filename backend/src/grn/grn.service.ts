@@ -140,14 +140,30 @@ export class GrnService {
         include: { items: true },
       });
 
+      // Audit Log for GRN Creation
+      await tx.auditLog.create({
+        data: {
+          userId,
+          action: 'CREATE',
+          module: 'GRN',
+          entityName: 'GRN',
+          entityId: grn.id,
+          newData: JSON.stringify({
+            grnNumber,
+            purchaseOrderId: data.purchaseOrderId,
+            itemCount: data.items.length,
+          }),
+        },
+      });
+
       return grn;
     });
   }
 
   async verify(id: string, userId: string) {
     const grn = await this.findOne(id);
-    if (grn.status === 'VERIFIED') {
-      throw new BadRequestException('GRN is already verified');
+    if (grn.status !== 'DRAFT') {
+      throw new BadRequestException(`GRN is already processed (status: ${grn.status})`);
     }
 
     return this.prisma.$transaction(async (tx) => {
@@ -232,15 +248,50 @@ export class GrnService {
         }
       }
 
-      // 3. Check if all PO items are fulfilled
+      // 3. Check PO fulfillment status based on cumulative accepted/received quantities
       const poItems = await tx.purchaseOrderItem.findMany({
         where: { purchaseOrderId: grn.purchaseOrderId },
       });
 
-      const allFulfilled = poItems.every((item) => item.receivedQty >= item.orderedQty);
-      await tx.purchaseOrder.update({
+      const totalReceived = poItems.reduce((acc, item) => acc + item.receivedQty, 0);
+      const allFulfilled =
+        poItems.length > 0 &&
+        poItems.every((item) => item.receivedQty >= item.orderedQty);
+
+      const po = await tx.purchaseOrder.findUnique({
         where: { id: grn.purchaseOrderId },
-        data: { status: allFulfilled ? 'COMPLETED' : 'PARTIAL' },
+      });
+
+      let targetPoStatus = po?.status || 'APPROVED';
+      if (allFulfilled) {
+        targetPoStatus = 'COMPLETED';
+      } else if (totalReceived > 0) {
+        targetPoStatus = 'PARTIAL';
+      }
+
+      if (po && po.status !== targetPoStatus) {
+        await tx.purchaseOrder.update({
+          where: { id: grn.purchaseOrderId },
+          data: { status: targetPoStatus },
+        });
+      }
+
+      // 4. Record Audit Log inside transaction
+      await tx.auditLog.create({
+        data: {
+          userId,
+          action: 'VERIFY',
+          module: 'GRN',
+          entityName: 'GRN',
+          entityId: grn.id,
+          oldData: JSON.stringify({ status: grn.status }),
+          newData: JSON.stringify({
+            status: newStatus,
+            poStatus: targetPoStatus,
+            totalReceived,
+            verifiedAt: new Date().toISOString(),
+          }),
+        },
       });
 
       return updatedGrn;

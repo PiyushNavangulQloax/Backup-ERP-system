@@ -20,6 +20,7 @@ import {
   Clock,
   ChevronRight,
   GitFork,
+  ShieldCheck,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { WorkflowStepper } from '../components/WorkflowStepper';
@@ -48,6 +49,7 @@ export const DashboardPage: React.FC = () => {
     { title: 'Pending Tax Invoices', value: kpis?.pendingInvoices ?? 0, icon: Receipt, link: '/invoices', tag: 'Billing', badgeColor: 'bg-purple-100 text-purple-900 border-purple-300' },
     { title: 'Shipments in Prep', value: kpis?.pendingDispatches ?? 0, icon: Truck, link: '/dispatch', tag: 'Logistics', badgeColor: 'bg-emerald-100 text-emerald-900 border-emerald-300' },
     { title: 'Barcode Scans (24h)', value: kpis?.recentScans24h ?? 0, icon: Barcode, link: '/barcodes', tag: 'Traceability', badgeColor: 'bg-sky-100 text-sky-900 border-sky-300' },
+    { title: 'Pending QA Inspections', value: kpis?.pendingInspections ?? 0, icon: ShieldCheck, link: '/quality?status=PENDING', tag: 'Quality QA', badgeColor: 'bg-teal-100 text-teal-900 border-teal-300' },
     { title: 'Low Stock Warnings', value: kpis?.lowStockAlerts ?? 0, icon: AlertTriangle, link: '/inventory', tag: 'Critical Alert', badgeColor: 'bg-rose-100 text-rose-900 border-rose-300' },
   ];
 

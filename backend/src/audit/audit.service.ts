@@ -20,25 +20,37 @@ export class AuditService {
     });
   }
 
-  async logEvent(data: {
-    userId?: string;
-    action: string;
-    module: string;
-    entityName: string;
-    entityId?: string;
-    oldData?: any;
-    newData?: any;
-    ipAddress?: string;
-  }) {
-    return this.prisma.auditLog.create({
+  async logEvent(
+    data: {
+      userId?: string;
+      action: string;
+      module: string;
+      entityName: string;
+      entityId?: string;
+      oldData?: any;
+      newData?: any;
+      ipAddress?: string;
+    },
+    tx?: any,
+  ) {
+    const db = tx || this.prisma;
+    return db.auditLog.create({
       data: {
         userId: data.userId,
         action: data.action,
         module: data.module,
         entityName: data.entityName,
         entityId: data.entityId,
-        oldData: data.oldData ? JSON.stringify(data.oldData) : null,
-        newData: data.newData ? JSON.stringify(data.newData) : null,
+        oldData: data.oldData
+          ? typeof data.oldData === 'string'
+            ? data.oldData
+            : JSON.stringify(data.oldData)
+          : null,
+        newData: data.newData
+          ? typeof data.newData === 'string'
+            ? data.newData
+            : JSON.stringify(data.newData)
+          : null,
         ipAddress: data.ipAddress,
       },
     });

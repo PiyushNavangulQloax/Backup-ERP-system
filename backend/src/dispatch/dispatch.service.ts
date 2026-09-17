@@ -74,6 +74,15 @@ export class DispatchService {
   }) {
     const invoice = await this.prisma.invoice.findUnique({
       where: { id: data.invoiceId },
+      include: {
+        items: { include: { part: true } },
+        salesOrder: {
+          include: {
+            customer: true,
+            items: { include: { part: true } },
+          },
+        },
+      },
     });
     if (!invoice) throw new NotFoundException('Invoice not found');
 
@@ -81,15 +90,107 @@ export class DispatchService {
       throw new BadRequestException('At least one box must be assigned to dispatch');
     }
 
-    // Ensure boxes are SEALED
+    // Load boxes with items and relationships
     const boxes = await this.prisma.box.findMany({
       where: { id: { in: data.boxIds } },
+      include: {
+        items: { include: { part: true } },
+        packingOrder: { include: { salesOrder: true } },
+        dispatchBoxes: { include: { dispatch: true } },
+      },
     });
 
+    if (boxes.length !== data.boxIds.length) {
+      throw new BadRequestException('One or more specified boxes were not found');
+    }
+
+    // Map invoice allowed quantities by partId
+    const invoiceQtyByPart = new Map<string, { qty: number; name: string }>();
+    for (const invItem of invoice.items) {
+      const current = invoiceQtyByPart.get(invItem.partId) || {
+        qty: 0,
+        name: invItem.part?.name || invItem.partId,
+      };
+      invoiceQtyByPart.set(invItem.partId, {
+        qty: current.qty + invItem.quantity,
+        name: invItem.part?.name || invItem.partId,
+      });
+    }
+
+    // Accumulate total box quantities by part
+    const boxQtyByPart = new Map<string, number>();
+
     for (const b of boxes) {
+      // 1. Box must be SEALED and not already dispatched
       if (b.status !== 'SEALED') {
+        if ((b.status as string) === 'DISPATCHED') {
+          throw new BadRequestException(`Box ${b.boxNumber} has already been dispatched`);
+        }
         throw new BadRequestException(
           `Box ${b.boxNumber} is in '${b.status}' status. Only SEALED boxes can be dispatched`,
+        );
+      }
+
+      // 2. Box must not already have been dispatched in a prior completed shipment
+      const alreadyDispatched = b.dispatchBoxes?.some(
+        (db) => db.dispatch && (db.dispatch.status === 'GATE_OUT' || db.dispatch.status === 'DISPATCHED'),
+      );
+      if (alreadyDispatched) {
+        throw new BadRequestException(
+          `Box ${b.boxNumber} has already been dispatched in a completed shipment`,
+        );
+      }
+
+      // 3. Validate PackingOrder & SalesOrder linkage if applicable
+      const bAny = b as any;
+      if (bAny.packingOrder?.salesOrderId && invoice.salesOrderId) {
+        if (bAny.packingOrder.salesOrderId !== invoice.salesOrderId) {
+          throw new BadRequestException(
+            `Box ${b.boxNumber} belongs to Sales Order '${bAny.packingOrder.salesOrder?.orderNumber || bAny.packingOrder.salesOrderId}', which does not match Invoice Sales Order '${invoice.salesOrder?.orderNumber || invoice.salesOrderId}'.`,
+          );
+        }
+      }
+
+      // 4. Validate customer matching if SO exists
+      if (invoice.salesOrder && invoice.customerId !== invoice.salesOrder.customerId) {
+        throw new BadRequestException(
+          `Invoice customer does not match Sales Order customer for invoice ${invoice.invoiceNumber}`,
+        );
+      }
+
+      // 5. Validate that all parts inside the box exist on the invoice & SO
+      if (!b.items || b.items.length === 0) {
+        throw new BadRequestException(`Box ${b.boxNumber} is empty and cannot be dispatched`);
+      }
+
+      for (const bi of b.items) {
+        if (!invoiceQtyByPart.has(bi.partId)) {
+          throw new BadRequestException(
+            `Box ${b.boxNumber} contains unauthorized part '${bi.part?.name || bi.partId}' which is not present in Invoice #${invoice.invoiceNumber}.`,
+          );
+        }
+
+        // Check against SO authorized parts if SO is linked
+        if (invoice.salesOrder) {
+          const soHasPart = invoice.salesOrder.items.some((soItem) => soItem.partId === bi.partId);
+          if (!soHasPart) {
+            throw new BadRequestException(
+              `Part '${bi.part?.name || bi.partId}' in Box ${b.boxNumber} is not authorized by Sales Order #${invoice.salesOrder.orderNumber}.`,
+            );
+          }
+        }
+
+        const prevQty = boxQtyByPart.get(bi.partId) || 0;
+        boxQtyByPart.set(bi.partId, prevQty + bi.quantity);
+      }
+    }
+
+    // 6. Validate cumulative quantities: boxes must not exceed invoiced quantities
+    for (const [partId, totalBoxQty] of boxQtyByPart.entries()) {
+      const invInfo = invoiceQtyByPart.get(partId);
+      if (invInfo && totalBoxQty > invInfo.qty) {
+        throw new BadRequestException(
+          `Cumulative box quantity (${totalBoxQty}) exceeds invoiced quantity (${invInfo.qty}) for part '${invInfo.name}'.`,
         );
       }
     }
@@ -97,39 +198,59 @@ export class DispatchService {
     const count = await this.prisma.dispatch.count();
     const dispatchNumber = `DSP-${new Date().getFullYear()}-${String(count + 1).padStart(4, '0')}`;
 
-    return this.prisma.dispatch.create({
-      data: {
-        dispatchNumber,
-        invoiceId: data.invoiceId,
-        customerId: invoice.customerId,
-        transporterId: data.transporterId,
-        vehicleNumber: data.vehicleNumber,
-        vehicleType: data.vehicleType || 'Covered Truck',
-        driverName: data.driverName,
-        driverPhone: data.driverPhone,
-        driverLicense: data.driverLicense,
-        lrNumber: data.lrNumber,
-        movementType: data.movementType || 'Customer Delivery',
-        reasonForTransport: data.reasonForTransport || 'Supply',
-        referenceType: data.referenceType || 'Sales Order',
-        referenceNumber: data.referenceNumber || `SO-${dispatchNumber.replace('DSP-', '')}`,
-        ewayBillNumber: data.ewayBillNumber,
-        sealRequired: data.sealRequired || false,
-        sealNumber: data.sealNumber,
-        specialInstructions: data.specialInstructions,
-        status: 'PREPARED',
-        createdById: userId,
-        boxes: {
-          create: data.boxIds.map((boxId) => ({
-            boxId,
-          })),
+    return this.prisma.$transaction(async (tx) => {
+      const dispatch = await tx.dispatch.create({
+        data: {
+          dispatchNumber,
+          invoiceId: data.invoiceId,
+          customerId: invoice.customerId,
+          transporterId: data.transporterId,
+          vehicleNumber: data.vehicleNumber,
+          vehicleType: data.vehicleType || 'Covered Truck',
+          driverName: data.driverName,
+          driverPhone: data.driverPhone,
+          driverLicense: data.driverLicense,
+          lrNumber: data.lrNumber,
+          movementType: data.movementType || 'Customer Delivery',
+          reasonForTransport: data.reasonForTransport || 'Supply',
+          referenceType: data.referenceType || 'Sales Order',
+          referenceNumber: data.referenceNumber || (invoice.salesOrder?.orderNumber ? invoice.salesOrder.orderNumber : `SO-${dispatchNumber.replace('DSP-', '')}`),
+          ewayBillNumber: data.ewayBillNumber,
+          sealRequired: data.sealRequired || false,
+          sealNumber: data.sealNumber,
+          specialInstructions: data.specialInstructions,
+          status: 'PREPARED',
+          createdById: userId,
+          boxes: {
+            create: data.boxIds.map((boxId) => ({
+              boxId,
+            })),
+          },
         },
-      },
-      include: {
-        customer: true,
-        invoice: true,
-        boxes: { include: { box: true } },
-      },
+        include: {
+          customer: true,
+          invoice: true,
+          boxes: { include: { box: true } },
+        },
+      });
+
+      await tx.auditLog.create({
+        data: {
+          userId,
+          action: 'CREATE',
+          module: 'DISPATCH',
+          entityName: 'Dispatch',
+          entityId: dispatch.id,
+          newData: JSON.stringify({
+            dispatchNumber: dispatch.dispatchNumber,
+            invoiceId: dispatch.invoiceId,
+            boxCount: data.boxIds.length,
+            status: dispatch.status,
+          }),
+        },
+      });
+
+      return dispatch;
     });
   }
 
@@ -143,13 +264,33 @@ export class DispatchService {
       throw new BadRequestException('Box is not part of this dispatch manifest');
     }
 
-    return this.prisma.dispatchBox.update({
-      where: { id: dispatchBox.id },
-      data: {
-        verifiedAt: new Date(),
-        verifiedBy: userId,
-      },
-      include: { box: true },
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.dispatchBox.update({
+        where: { id: dispatchBox.id },
+        data: {
+          verifiedAt: new Date(),
+          verifiedBy: userId,
+        },
+        include: { box: true },
+      });
+
+      await tx.auditLog.create({
+        data: {
+          userId,
+          action: 'VERIFY_BOX',
+          module: 'DISPATCH',
+          entityName: 'DispatchBox',
+          entityId: dispatchBox.id,
+          newData: JSON.stringify({
+            dispatchId,
+            boxId,
+            boxNumber: dispatchBox.box?.boxNumber,
+            verifiedAt: new Date().toISOString(),
+          }),
+        },
+      });
+
+      return updated;
     });
   }
 

@@ -31,6 +31,11 @@ async function main() {
     { code: 'grn.create', module: 'Inwarding', description: 'Create GRN and inward materials' },
     { code: 'grn.verify', module: 'Inwarding', description: 'Quality inspection and sign-off' },
 
+    // Quality Management
+    { code: 'quality.view', module: 'Quality', description: 'View quality inspections' },
+    { code: 'quality.manage', module: 'Quality', description: 'Create and start quality inspections' },
+    { code: 'quality.approve', module: 'Quality', description: 'Complete and approve quality inspections' },
+
     // Inventory
     { code: 'inventory.view', module: 'Inventory', description: 'View stock levels and movements' },
     { code: 'inventory.manage', module: 'Inventory', description: 'Stock transfers and general management' },
@@ -109,12 +114,12 @@ async function main() {
       'users.view', 'masters.view', 'po.view', 'po.approve', 'grn.view',
       'inventory.view', 'production.view', 'packing.view', 'billing.view',
       'billing.approve', 'dispatch.view', 'dispatch.gate_out', 'reports.view',
-      'reports.export', 'audit.view', 'documents.view'
+      'reports.export', 'audit.view', 'documents.view', 'quality.view', 'quality.approve'
     ],
     'Purchase User': ['masters.view', 'masters.create', 'masters.edit', 'po.view', 'po.create', 'po.edit', 'grn.view', 'inventory.view', 'reports.view'],
     'Stores User': ['masters.view', 'po.view', 'grn.view', 'grn.create', 'inventory.view', 'inventory.manage', 'inventory.adjust', 'inventory.issue', 'inventory.return', 'barcode.scan'],
     'Production User': ['masters.view', 'production.view', 'production.manage', 'inventory.view', 'inventory.issue', 'inventory.return', 'barcode.scan'],
-    'Quality User': ['masters.view', 'po.view', 'grn.view', 'grn.verify', 'production.view', 'barcode.scan'],
+    'Quality User': ['masters.view', 'po.view', 'grn.view', 'grn.verify', 'production.view', 'barcode.scan', 'quality.view', 'quality.manage', 'quality.approve'],
     'Packing User': ['masters.view', 'packing.view', 'packing.manage', 'packing.close', 'barcode.scan', 'barcode.print'],
     'Billing User': ['masters.view', 'billing.view', 'billing.manage', 'billing.approve', 'packing.view', 'reports.view'],
     'Dispatch User': ['masters.view', 'dispatch.view', 'dispatch.manage', 'dispatch.gate_out', 'packing.view', 'barcode.scan'],

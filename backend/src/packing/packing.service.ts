@@ -13,15 +13,17 @@ export class PackingService {
     return this.prisma;
   }
 
-  async getBoxes(params?: { status?: string }) {
+  async getBoxes(params?: { status?: string; packingOrderId?: string }) {
     const where: any = {};
     if (params?.status) where.status = params.status;
+    if (params?.packingOrderId) where.packingOrderId = params.packingOrderId;
 
     return this.prisma.box.findMany({
       where,
       include: {
         items: { include: { part: { include: { unit: true } } } },
         sealedBy: { select: { firstName: true, lastName: true, email: true } },
+        packingOrder: { select: { id: true, orderNumber: true, status: true } },
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -33,6 +35,12 @@ export class PackingService {
       include: {
         items: { include: { part: { include: { unit: true } } } },
         sealedBy: { select: { firstName: true, lastName: true, email: true } },
+        packingOrder: {
+          include: {
+            salesOrder: { include: { customer: true } },
+            items: { include: { part: true } },
+          },
+        },
       },
     });
     if (!box) throw new NotFoundException('Box not found');
@@ -45,6 +53,30 @@ export class PackingService {
     grossWeight?: number;
     packingOrderId?: string;
   }) {
+    if (data.packingOrderId) {
+      const pOrder = await this.db.packingOrder.findUnique({
+        where: { id: data.packingOrderId },
+        include: { salesOrder: true },
+      });
+      if (!pOrder) {
+        throw new NotFoundException('Packing Order not found');
+      }
+      if (pOrder.status === 'COMPLETED' || pOrder.status === 'CANCELLED') {
+        throw new BadRequestException(
+          `Cannot create box against a ${pOrder.status} Packing Order`,
+        );
+      }
+      if (
+        pOrder.salesOrder &&
+        pOrder.salesOrder.status !== 'APPROVED' &&
+        pOrder.salesOrder.status !== 'PARTIALLY_FULFILLED'
+      ) {
+        throw new BadRequestException(
+          `Sales Order is not approved (status: ${pOrder.salesOrder.status})`,
+        );
+      }
+    }
+
     const count = await this.prisma.box.count();
     const boxNumber = `BOX-${String(count + 1).padStart(4, '0')}`;
     const todayStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
@@ -65,6 +97,9 @@ export class PackingService {
 
     const box = await (this.prisma.box.create as any)({
       data: createData,
+      include: {
+        packingOrder: { select: { id: true, orderNumber: true } },
+      },
     });
 
     // Register into Barcode master table
@@ -112,12 +147,17 @@ export class PackingService {
     }
 
     const boxAny = box as any;
-    // 2. If box belongs to a PackingOrder, ensure we don't exceed requiredQty
+    // 2. If box belongs to a PackingOrder, ensure part is authorized and doesn't exceed requiredQty
     if (boxAny.packingOrderId) {
       const pItem = await this.db.packingOrderItem.findFirst({
         where: { packingOrderId: boxAny.packingOrderId, partId: data.partId },
       });
-      if (pItem && pItem.packedQty + data.quantity > pItem.requiredQty) {
+      if (!pItem) {
+        throw new BadRequestException(
+          `Part is not authorized for Packing Order '${boxAny.packingOrderId}'.`,
+        );
+      }
+      if (pItem.packedQty + data.quantity > pItem.requiredQty) {
         throw new BadRequestException(
           `Packing quantity (${data.quantity}) exceeds remaining order requirement (${pItem.pendingQty}).`,
         );
@@ -229,6 +269,22 @@ export class PackingService {
           });
         }
       }
+
+      await tx.auditLog.create({
+        data: {
+          userId,
+          action: 'SEAL',
+          module: 'PACKING',
+          entityName: 'Box',
+          entityId: boxId,
+          oldData: JSON.stringify({ status: box.status }),
+          newData: JSON.stringify({
+            status: 'SEALED',
+            boxNumber: box.boxNumber,
+            itemCount: box.items.length,
+          }),
+        },
+      });
 
       return updatedBox;
     });

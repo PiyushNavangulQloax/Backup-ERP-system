@@ -326,6 +326,23 @@ export class ProductionService {
         });
       }
 
+      await tx.auditLog.create({
+        data: {
+          userId,
+          action: 'COMPLETE',
+          module: 'PRODUCTION',
+          entityName: 'JobCard',
+          entityId: id,
+          oldData: JSON.stringify({ status: jobCard.status }),
+          newData: JSON.stringify({
+            status: 'COMPLETED',
+            producedQty: data.producedQty,
+            rejectedQty: data.rejectedQty,
+            jobCardNumber: jobCard.jobCardNumber,
+          }),
+        },
+      });
+
       return updatedJob;
     });
   }

@@ -42,6 +42,7 @@ model User {
   scanHistories     BarcodeScanHistory[]
   auditLogs         AuditLog[]
   notifications     Notification[]
+  qualityInspections QualityInspection[] @relation("QualityInspector")
 }
 
 model Role {
@@ -185,6 +186,7 @@ model Part {
   salesOrderItems SalesOrderItem[]
   packingOrderItems PackingOrderItem[]
   customerParts  CustomerPart[]
+  qualityInspections QualityInspection[]
 }
 
 model Tax {
@@ -315,6 +317,7 @@ model GRN {
   updatedAt         DateTime  @updatedAt
 
   items             GRNItem[]
+  qualityInspections QualityInspection[]
 }
 
 model GRNItem {
@@ -335,6 +338,7 @@ model GRNItem {
   location        Location?         @relation(fields: [locationId], references: [id])
   batchNumber     String?
   rejectionReason String?
+  qualityInspections QualityInspection[]
 }
 
 // -----------------------------------------------------------------------------
@@ -476,6 +480,7 @@ model JobCard {
   materialReturns MaterialReturn[]
   boxItems        BoxItem[]
   operations      JobCardOperation[]
+  qualityInspections QualityInspection[]
 }
 
 model JobCardOperation {
@@ -880,4 +885,42 @@ model Notification {
   type      String   @default("INFO") // INFO, WARNING, SUCCESS, ERROR
   isRead    Boolean  @default(false)
   createdAt DateTime @default(now())
+}
+
+// -----------------------------------------------------------------------------
+// Quality Management & Inspections (Phase 3.3)
+// -----------------------------------------------------------------------------
+
+model QualityInspection {
+  id               String    @id @default(uuid())
+  inspectionNumber String    @unique
+  sourceType       String    // INCOMING_GRN, PRODUCTION_OUTPUT
+  sourceId         String?   // Reference ID (GRN ID or JobCard ID)
+  grnId            String?
+  grn              GRN?      @relation(fields: [grnId], references: [id])
+  grnItemId        String?
+  grnItem          GRNItem?  @relation(fields: [grnItemId], references: [id])
+  jobCardId        String?
+  jobCard          JobCard?  @relation(fields: [jobCardId], references: [id])
+  partId           String
+  part             Part      @relation(fields: [partId], references: [id])
+  batchNumber      String?
+  inspectedQty     Float
+  acceptedQty      Float     @default(0)
+  rejectedQty      Float     @default(0)
+  status           String    @default("PENDING") // PENDING, IN_PROGRESS, COMPLETED
+  decision         String    @default("PENDING") // PENDING, ACCEPTED, PARTIALLY_ACCEPTED, REJECTED
+  rejectionReason  String?
+  remarks          String?
+  inspectedById    String?
+  inspectedBy      User?     @relation("QualityInspector", fields: [inspectedById], references: [id])
+  inspectedAt      DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@index([sourceType, sourceId])
+  @@index([status])
+  @@index([decision])
+  @@index([partId])
+  @@index([createdAt])
 }
