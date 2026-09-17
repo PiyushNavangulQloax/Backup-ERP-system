@@ -273,7 +273,7 @@ export const GrnPage: React.FC = () => {
                         value: po.id,
                         label: `${po.poNumber} - ${po.supplier?.name}`,
                         sublabel: `Date: ${new Date(po.orderDate).toLocaleDateString()} | Items: ${po.items?.length || 0}`,
-                        badge: `Total: $${po.grandTotal?.toFixed(2) || '0.00'}`,
+                        badge: `Total: ₹${po.grandTotal?.toFixed(2) || '0.00'}`,
                       })) || []
                     }
                     placeholder="-- Search & Select Approved PO --"

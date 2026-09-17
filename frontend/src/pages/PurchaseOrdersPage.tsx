@@ -372,7 +372,7 @@ export const PurchaseOrdersPage: React.FC = () => {
                         units)
                       </td>
                       <td className="py-4 px-5 font-mono font-black text-slate-900 text-base">
-                        ${po.grandTotal?.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                        ₹{po.grandTotal?.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                       </td>
                       <td className="py-4 px-5">
                         <div>
@@ -742,7 +742,7 @@ export const PurchaseOrdersPage: React.FC = () => {
                               Total
                             </label>
                             <span className="font-mono font-black text-blue-700 text-sm block py-1.5 px-2 bg-white rounded-xl text-right border border-slate-200 shadow-sm">
-                              ${(it.orderedQty * it.unitPrice).toFixed(2)}
+                              ₹{(it.orderedQty * it.unitPrice).toFixed(2)}
                             </span>
                           </div>
 

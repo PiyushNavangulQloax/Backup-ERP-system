@@ -844,7 +844,7 @@ export const MastersPage: React.FC = () => {
                           {stock} {uom}
                         </span>
                       </td>
-                      <td className="py-4 px-5 font-mono font-black text-slate-900">${p.standardCost?.toFixed(2)}</td>
+                      <td className="py-4 px-5 font-mono font-black text-slate-900">₹{p.standardCost?.toFixed(2)}</td>
                       <td className="py-4 px-5 font-mono text-xs font-bold text-slate-700 bg-slate-50 px-2 py-1 rounded border border-slate-200">
                         {p.barcodeValue}
                       </td>

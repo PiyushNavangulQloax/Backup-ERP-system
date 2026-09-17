@@ -257,13 +257,13 @@ export const InvoicesPage: React.FC = () => {
                       {new Date(inv.invoiceDate).toLocaleDateString()}
                     </td>
                     <td className="py-4 px-5 font-mono text-slate-800 font-bold">
-                      ${inv.subTotal?.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                      ₹{inv.subTotal?.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                     </td>
                     <td className="py-4 px-5 font-mono text-slate-700">
-                      ${inv.taxAmount?.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                      ₹{inv.taxAmount?.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                     </td>
                     <td className="py-4 px-5 font-mono font-black text-slate-900 text-base">
-                      ${inv.grandTotal?.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                      ₹{inv.grandTotal?.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                     </td>
                     <td className="py-4 px-5">
                       <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black tracking-wide border ${
@@ -350,7 +350,7 @@ export const InvoicesPage: React.FC = () => {
                     { value: '', label: '-- Direct Invoice (No Sales Order) --' },
                     ...(salesOrders?.map((so: any) => ({
                       value: so.id,
-                      label: `${so.orderNumber} • ${so.customer?.name || 'Customer'} ($${Number(so.grandTotal || 0).toLocaleString()})`,
+                      label: `${so.orderNumber} • ${so.customer?.name || 'Customer'} (₹${Number(so.grandTotal || 0).toLocaleString('en-IN')})`,
                       sublabel: `Status: ${so.status} | Items: ${so.items?.length || 0} line(s)`,
                       badge: so.status,
                     })) || []),
@@ -716,7 +716,7 @@ export const InvoicesPage: React.FC = () => {
                 <div>
                   <span className="text-xs text-slate-500 font-bold block">Total Amount Paid:</span>
                   <div className="text-xl font-mono font-black text-slate-900">
-                    ${confirmModalInvoice.grandTotal?.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                    ₹{confirmModalInvoice.grandTotal?.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                   </div>
                 </div>
                 <div className="flex gap-2">

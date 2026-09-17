@@ -410,7 +410,7 @@ export const ProductionPage: React.FC = () => {
                   options={fgParts.map((p: any) => ({
                     value: p.id,
                     label: `${p.name} (${p.code})`,
-                    sublabel: `UOM: ${p.uom || 'units'} | Cost: $${p.standardCost || 0}`,
+                    sublabel: `UOM: ${p.uom || 'units'} | Cost: ₹${p.standardCost || 0}`,
                   }))}
                   placeholder="-- Search & Select Finished Product --"
                 />
@@ -512,7 +512,7 @@ export const ProductionPage: React.FC = () => {
                   options={rawParts.map((p: any) => ({
                     value: p.id,
                     label: `${p.name} (${p.code})`,
-                    sublabel: `UOM: ${p.uom || 'units'} | Cost: $${p.standardCost || 0}`,
+                    sublabel: `UOM: ${p.uom || 'units'} | Cost: ₹${p.standardCost || 0}`,
                   }))}
                   placeholder="-- Search & Select Component Part --"
                 />

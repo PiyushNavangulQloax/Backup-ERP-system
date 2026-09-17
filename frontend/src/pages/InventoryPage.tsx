@@ -265,7 +265,7 @@ export const InventoryPage: React.FC = () => {
                           </span>
                         </td>
                         <td className="py-4 px-5 font-mono font-black text-slate-900 text-base">
-                          ${(s.quantityOnHand * (s.part.standardCost || 0)).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                          ₹{(s.quantityOnHand * (s.part.standardCost || 0)).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                         </td>
                         <td className="py-4 px-5 font-mono text-xs text-slate-700 whitespace-nowrap">
                           {inwardTime ? (

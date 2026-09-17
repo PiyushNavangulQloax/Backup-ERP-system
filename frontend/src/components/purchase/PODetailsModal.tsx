@@ -289,13 +289,13 @@ export const PODetailsModal: React.FC<PODetailsModalProps> = ({ poId, onClose })
                           {item.orderedQty} <span className="font-normal text-slate-500">{uom}</span>
                         </td>
                         <td className="py-2.5 px-3 text-right font-mono text-slate-800">
-                          ${Number(item.unitPrice).toFixed(2)}
+                          ₹{Number(item.unitPrice).toFixed(2)}
                         </td>
                         <td className="py-2.5 px-3 text-right font-mono text-slate-700">
                           {item.taxRate || 0}%
                         </td>
                         <td className="py-2.5 px-3 text-right font-mono font-black text-slate-900">
-                          ${Number(item.lineTotal || item.orderedQty * item.unitPrice).toFixed(2)}
+                          ₹{Number(item.lineTotal || item.orderedQty * item.unitPrice).toFixed(2)}
                         </td>
                       </tr>
                     );
@@ -310,19 +310,19 @@ export const PODetailsModal: React.FC<PODetailsModalProps> = ({ poId, onClose })
                 <div className="flex justify-between text-slate-600">
                   <span>Subtotal:</span>
                   <span className="font-mono font-bold text-slate-800">
-                    ${Number(po.totalAmount || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                    ₹{Number(po.totalAmount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                   </span>
                 </div>
                 <div className="flex justify-between text-slate-600">
                   <span>Estimated Tax:</span>
                   <span className="font-mono font-bold text-slate-800">
-                    ${Number(po.taxAmount || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                    ₹{Number(po.taxAmount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                   </span>
                 </div>
                 <div className="flex justify-between pt-1.5 border-t border-slate-300 text-sm font-black text-slate-900">
                   <span>Grand Total:</span>
                   <span className="font-mono text-blue-700">
-                    ${Number(po.grandTotal || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                    ₹{Number(po.grandTotal || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                   </span>
                 </div>
               </div>
