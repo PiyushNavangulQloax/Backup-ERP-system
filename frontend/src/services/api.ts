@@ -1,7 +1,9 @@
 import axios from 'axios';
 
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api/v1';
+
 export const api = axios.create({
-  baseURL: '/api/v1',
+  baseURL: API_BASE_URL,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -37,7 +39,10 @@ api.interceptors.response.use(
 
 export const downloadFile = async (endpoint: string, defaultFilename: string) => {
   const token = localStorage.getItem('access_token');
-  const urlPath = endpoint.startsWith('/api/v1') ? endpoint : `/api/v1${endpoint.startsWith('/') ? '' : '/'}${endpoint}`;
+  const cleanEndpoint = endpoint.replace(/^\/api\/v1\/?/, '').replace(/^\//, '');
+  const urlPath = API_BASE_URL.startsWith('http')
+    ? `${API_BASE_URL.replace(/\/$/, '')}/${cleanEndpoint}`
+    : `/api/v1/${cleanEndpoint}`;
   const response = await fetch(urlPath, {
     headers: token ? { Authorization: `Bearer ${token}` } : {},
   });
